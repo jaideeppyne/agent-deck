@@ -25,7 +25,7 @@ jobs:
             -e AGENTDECK_SKIP_UPDATE_CHECK=1 agentdeck-cross-profile bash -c '
               set -eu
               mkdir -p "$HOME"
-              git clone --no-hardlinks /src /tmp/base
+              cp -R /src /tmp/base
               cd /tmp/base
               git checkout 036915808f43363ca9d54e77ce1fc0706b82029c
               cp /src/cmd/agent-deck/cross_profile_account_test.go cmd/agent-deck/
