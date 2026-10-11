@@ -34,7 +34,7 @@ func TestSessionSendSocketWaitPeerReply(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			if err := os.WriteFile(filepath.Join(config, "config.toml"), []byte("[claude]\nsend_transport = 'auto'\n"), 0o600); err != nil {
+			if err := os.WriteFile(filepath.Join(config, "config.toml"), []byte("send_transport = 'auto'\n"), 0o600); err != nil {
 				t.Fatal(err)
 			}
 			shim := "#!/bin/sh\nexec \"$SOCKET_WAIT_TEST_BINARY\" -test.run=^TestSocketWaitClaudeFixture$ -- \"$@\"\n"

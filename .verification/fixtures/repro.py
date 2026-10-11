@@ -12,7 +12,7 @@ binary = sys.argv[1]
 home = pathlib.Path(os.environ["HOME"])
 config = pathlib.Path(os.environ["XDG_CONFIG_HOME"]) / "agent-deck"
 config.mkdir(parents=True)
-(config / "config.toml").write_text("[claude]\nsend_transport = 'auto'\n")
+(config / "config.toml").write_text("send_transport = 'auto'\n")
 shimdir = home / "bin"
 shimdir.mkdir()
 shim = shimdir / "claude"

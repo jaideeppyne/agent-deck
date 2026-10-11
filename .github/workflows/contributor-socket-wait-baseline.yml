@@ -30,7 +30,7 @@ jobs:
               cp -R /src /tmp/src
               cd /tmp/src
               git worktree add /tmp/base 036915808f43363ca9d54e77ce1fc0706b82029c
-              git show 8ba792b8eaa6e38fc1034581e8a48a32ed14fdef:cmd/agent-deck/socket_wait_peer_test.go > /tmp/base/cmd/agent-deck/socket_wait_peer_test.go
+              git show fe30bb4242a9386dbfd37d3e0c064ef4765ff5a0:cmd/agent-deck/socket_wait_peer_test.go > /tmp/base/cmd/agent-deck/socket_wait_peer_test.go
               cd /tmp/base
               go version
               git rev-parse HEAD
