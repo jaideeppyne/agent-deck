@@ -1,0 +1,44 @@
+name: Shared-store review baseline (fork only)
+on:
+  push:
+    branches: ['verify/shared-projects-review-baseline']
+permissions:
+  contents: read
+jobs:
+  review-regressions:
+    if: github.repository == 'jaideeppyne/agent-deck'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: docker build -t shared-review-proof -f .verification/Dockerfile .verification
+      - name: Observe new review regressions on published production
+        run: |
+          mkdir proof
+          docker run --rm --init --mount type=bind,src="$PWD",dst=/src,readonly \
+            --mount type=bind,src="$PWD/proof",dst=/proof \
+            -e HOME=/tmp/home -e AGENTDECK_TEST_CONTAINER=1 \
+            -e AGENTDECK_TELEMETRY=0 -e AGENTDECK_SKIP_UPDATE_CHECK=1 \
+            shared-review-proof bash -c '
+              set -eu
+              mkdir -p "$HOME"
+              cp -R /src /tmp/check
+              cd /tmp/check
+              set +e
+              go test -v -count=1 -run "^Test(MigrateSharedProjectsStoreIdentity|SwitchSharedProjectsStoreRechecksAfterStop)$" ./internal/session > /proof/review-baseline.log 2>&1
+              rc=$?
+              set -e
+              cat /proof/review-baseline.log
+              test "$rc" -eq 1
+              ! grep -q "build failed" /proof/review-baseline.log
+              grep -q "FAIL: TestMigrateSharedProjectsStoreIdentity/stale" /proof/review-baseline.log
+              grep -q "FAIL: TestSwitchSharedProjectsStoreRechecksAfterStop/replace-directory" /proof/review-baseline.log
+            '
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: shared-review-baseline
+          path: proof/*.log
+          retention-days: 7
