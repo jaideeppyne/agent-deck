@@ -18,6 +18,12 @@ that behavior rather than adding an unnecessary exit-code change. Normal account
 mutation, storage CAS, journaling, rollback and restart remain in the existing
 executor. No dependencies or workflows belong to the proposed upstream diff.
 
+Review follow-up retains stale/missing-ID repair and ambiguity refusal before
+the legacy shared-store no-op, and compares directory identity with os.SameFile
+after stop to detect replacement at the same pathname. The 406-line diff is
+mostly regression coverage for this one no-copy safety contract; splitting its
+identity/symlink/rollback safeguards would leave an incomplete behavioral fix.
+
 ## User impact
 
 Shared-store account changes avoid staging, replacing, archiving or copying

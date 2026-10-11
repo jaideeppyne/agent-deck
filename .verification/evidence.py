@@ -18,7 +18,7 @@ def regression(args):
     out = pathlib.Path(args.out)
     out.mkdir(parents=True, exist_ok=False)
     command = ["go", "test", "-v", "-count=1", "-run",
-               "TestSwitchSharedProjectsStore|TestMigrateSharedProjectsStoreIsNoOp|TestSessionSwitchAccount_SharedProjectsStore",
+               "TestSwitchSharedProjectsStore|TestMigrateSharedProjectsStore|TestSessionSwitchAccount_SharedProjectsStore",
                "./internal/session", "./cmd/agent-deck"]
     tests = ["internal/session/shared_projects_store_test.go",
              "cmd/agent-deck/shared_projects_store_test.go"]
@@ -61,7 +61,7 @@ def finalize(args):
         "schema_version": 1, "candidate_id": "agent-deck-2639", "status": "fixed",
         "oracle": "Shared-store account switch succeeds without changing transcripts; separate-store symlink refusal remains nonzero.",
         "affected_revision": "036915808f43363ca9d54e77ce1fc0706b82029c",
-        "fixed_revision": "7831796b53d8eb9d093ab42a0206465bdf3c29f9",
+        "fixed_revision": "15a217d47b89300ea82f2f84a9b7d443673380be",
         "reproduction": {"old_receipt": "repro-old/receipt.json", "fixed_receipt": "repro-fixed/receipt.json"},
         "regression": {"test": "TestSessionSwitchAccount_SharedProjectsStore and session shared-store safety cases",
                        "old_receipt": "regression-old/receipt.json", "fixed_receipt": "regression-fixed/receipt.json"},
