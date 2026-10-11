@@ -62,7 +62,7 @@ def finalize(args):
         "schema_version": 1, "candidate_id": "agent-deck-2639", "status": "fixed",
         "oracle": "Shared-store account switch succeeds without changing transcripts; separate-store symlink refusal remains nonzero.",
         "affected_revision": "036915808f43363ca9d54e77ce1fc0706b82029c",
-        "fixed_revision": "ce4c577ef8bf054216cb9347b6dd39a3d2040810",
+        "fixed_revision": "207ab9705178fba8df20b89717f90ccb9a34f00e",
         "reproduction": {"old_receipt": "repro-old/receipt.json", "fixed_receipt": "repro-fixed/receipt.json"},
         "regression": {"test": "TestSessionSwitchAccount_SharedProjectsStore and session shared-store safety cases",
                        "old_receipt": "regression-old/receipt.json", "fixed_receipt": "regression-fixed/receipt.json"},

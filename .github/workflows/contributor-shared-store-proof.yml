@@ -34,7 +34,7 @@ jobs:
               cd /tmp/src
               go version
               git rev-parse HEAD
-              git worktree add /tmp/fixed ce4c577ef8bf054216cb9347b6dd39a3d2040810
+              git worktree add /tmp/fixed 207ab9705178fba8df20b89717f90ccb9a34f00e
               git worktree add /tmp/base 036915808f43363ca9d54e77ce1fc0706b82029c
               cp /tmp/fixed/internal/session/shared_projects_store_test.go /tmp/base/internal/session/
               cp /tmp/fixed/cmd/agent-deck/shared_projects_store_test.go /tmp/base/cmd/agent-deck/
@@ -103,7 +103,7 @@ jobs:
               mkdir -p "$HOME"
               cp -R /src /tmp/check
               cd /tmp/check
-              git checkout ce4c577ef8bf054216cb9347b6dd39a3d2040810
+              git checkout 207ab9705178fba8df20b89717f90ccb9a34f00e
               set +e
               FULL_TESTS=1 REPRO_REPORT=/proof/result.json BASE_REF=036915808f43363ca9d54e77ce1fc0706b82029c \
                 .github/skills/agent-deck-contributor/scripts/self-check.sh /src/.verification/pr-body.md > /proof/self-check.log 2>&1
@@ -133,7 +133,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ce4c577ef8bf054216cb9347b6dd39a3d2040810
+          ref: 207ab9705178fba8df20b89717f90ccb9a34f00e
           persist-credentials: false
       - name: Repository CI-equivalent verification
         run: |

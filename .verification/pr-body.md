@@ -33,7 +33,7 @@ receipt identifies the conversation already present in the shared store.
 
 ## Evidence
 
-Review follow-up source ce4c577 adds deterministic legacy identity-recheck tests
+Review follow-up source 207ab97 adds deterministic legacy identity-recheck tests
 and real TUI/loopback-SSH coverage. The oversized diff is inseparable safety
 coverage for the same no-copy account switch, not unrelated features. Splitting
 these into separate contributions would leave the core fix without requested
