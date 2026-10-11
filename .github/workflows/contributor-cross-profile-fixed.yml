@@ -1,0 +1,142 @@
+name: Contributor cross-profile fixed proof (fork only)
+on:
+  push:
+    branches: ['verify/cross-profile-fixed']
+permissions:
+  contents: read
+jobs:
+  reproduce:
+    if: github.repository == 'jaideeppyne/agent-deck'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Build isolated verification image
+        run: docker build -t agentdeck-shared-proof -f .verification/Dockerfile .verification
+      - name: Build affected binary and observe test-first failure
+        run: |
+          mkdir proof
+          image=$(docker image inspect agentdeck-shared-proof --format '{{.Id}}')
+          docker run --rm --init --mount type=bind,src="$PWD",dst=/src,readonly \
+            --mount type=bind,src="$PWD/proof",dst=/proof \
+            --mount type=volume,src=shared-proof-modules,dst=/go/pkg/mod \
+            --mount type=volume,src=shared-proof-build,dst=/go-build \
+            -e GOCACHE=/go-build -e PROOF_IMAGE="$image" -e PROOF_OWNER="$(id -u):$(id -g)" \
+            -e HOME=/tmp/home -e AGENTDECK_TEST_CONTAINER=1 \
+            -e AGENTDECK_TELEMETRY=0 -e AGENTDECK_SKIP_UPDATE_CHECK=1 \
+            agentdeck-shared-proof bash -c '
+              set -eu
+              mkdir -p "$HOME"
+              cp -R /src /tmp/src
+              cd /tmp/src
+              go version
+              git rev-parse HEAD
+              git worktree add /tmp/fixed 7b3a45b85fb8304987d866be2625dd759073b49e
+              git worktree add /tmp/base 036915808f43363ca9d54e77ce1fc0706b82029c
+              cp /tmp/fixed/cmd/agent-deck/cross_profile_account_test.go /tmp/base/cmd/agent-deck/
+              cd /tmp/base
+              go vet ./...
+              go build -o /proof/agent-deck-old ./cmd/agent-deck
+              set +e
+              python3 /src/.verification/evidence.py regression --out /proof/regression-old --image "$PROOF_IMAGE"
+              rc=$?
+              set -e
+              test "$rc" -eq 1
+              grep -q "caller account leaked across profile selection" /proof/regression-old/output.log
+              ! grep -q "build failed" /proof/regression-old/output.log
+              cd /tmp/fixed
+              go vet ./...
+              go build -o /proof/agent-deck-fixed ./cmd/agent-deck
+              set +e
+              python3 /src/.verification/evidence.py regression --out /proof/regression-fixed --image "$PROOF_IMAGE"
+              rc=$?
+              set -e
+              test "$rc" -eq 0
+              # Demonstrate the prior golden failure before correcting the environment.
+              set +e
+              go test -v -count=1 -run "^TestCLIGoldens$" ./cmd/agent-deck > /proof/goldens-forced-telemetry.log 2>&1
+              rc=$?
+              set -e
+              cat /proof/goldens-forced-telemetry.log
+              test "$rc" -eq 1
+              grep -q "AGENTDECK_TELEMETRY is set" /proof/goldens-forced-telemetry.log
+              unset AGENTDECK_TELEMETRY
+              go test -v -count=1 -run "^TestCLIGoldens$" ./cmd/agent-deck > /proof/goldens-default-telemetry.log 2>&1
+              cat /proof/goldens-default-telemetry.log
+              chown -R "$PROOF_OWNER" /proof
+            '
+      - name: Reproduce with real binary in offline container
+        run: |
+          image=$(docker image inspect agentdeck-shared-proof --format '{{.Id}}')
+          set +e
+          python3 skills/deck-repro/scripts/run.py --image "$image" --binary proof/agent-deck-old \
+            --script .verification/repro.sh --fixtures .verification/fixtures --out proof/repro-old --timeout 120
+          rc=$?
+          set -e
+          cat proof/repro-old/output.log
+          test "$rc" -eq 1
+          grep -q 'ORACLE: cross-profile launch inherited caller account' proof/repro-old/output.log
+          python3 skills/deck-repro/scripts/run.py --image "$image" --binary proof/agent-deck-fixed \
+            --script .verification/repro.sh --fixtures .verification/fixtures --out proof/repro-fixed --timeout 120
+          cat proof/repro-fixed/output.log
+          grep -q 'ORACLE: cross-profile launch used target profile account' proof/repro-fixed/output.log
+          sha256sum proof/agent-deck-old proof/agent-deck-fixed .verification/repro.sh .verification/fixtures/repro.py
+          python3 .verification/evidence.py finalize --out proof
+          python3 skills/deck-repro/scripts/validate.py proof/result.json --require-status fixed
+      - name: Full contributor self-check with receipt manifest
+        run: |
+          docker run --rm --init --mount type=bind,src="$PWD",dst=/src,readonly \
+            --mount type=bind,src="$PWD/proof",dst=/proof \
+            --mount type=volume,src=shared-proof-modules,dst=/go/pkg/mod \
+            --mount type=volume,src=shared-proof-build,dst=/go-build \
+            -e GOCACHE=/go-build -e HOME=/tmp/home -e AGENTDECK_TEST_CONTAINER=1 \
+            -e AGENTDECK_SKIP_UPDATE_CHECK=1 agentdeck-shared-proof bash -c '
+              set -eu
+              mkdir -p "$HOME"
+              cp -R /src /tmp/check
+              cd /tmp/check
+              git checkout 7b3a45b85fb8304987d866be2625dd759073b49e
+              set +e
+              FULL_TESTS=1 REPRO_REPORT=/proof/result.json BASE_REF=036915808f43363ca9d54e77ce1fc0706b82029c \
+                .github/skills/agent-deck-contributor/scripts/self-check.sh /src/.verification/pr-body.md > /proof/self-check.log 2>&1
+              rc=$?
+              set -e
+              cat /proof/self-check.log
+              test "$rc" -eq 0
+              grep -q "Ready to open" /proof/self-check.log
+            '
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cross-profile-fixed-proof
+          path: |
+            proof/*.log
+            proof/result.json
+            proof/regression-*/receipt.json
+            proof/regression-*/output.log
+            proof/repro-*/receipt.json
+            proof/repro-*/output.log
+            proof/repro-*/container.json
+          retention-days: 7
+  ci-checks:
+    if: github.repository == 'jaideeppyne/agent-deck'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 7b3a45b85fb8304987d866be2625dd759073b49e
+          persist-credentials: false
+      - name: Repository CI-equivalent verification
+        run: |
+          set -o pipefail
+          make verify-docker 2>&1 | tee "$RUNNER_TEMP/verify-docker.log"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cross-profile-ci-proof
+          path: ${{ runner.temp }}/verify-docker.log
+          retention-days: 7
