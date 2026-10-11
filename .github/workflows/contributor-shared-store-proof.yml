@@ -24,7 +24,7 @@ jobs:
             --mount type=bind,src="$PWD/proof",dst=/proof \
             --mount type=volume,src=shared-proof-modules,dst=/go/pkg/mod \
             --mount type=volume,src=shared-proof-build,dst=/go-build \
-            -e GOCACHE=/go-build -e PROOF_IMAGE="$image" \
+            -e GOCACHE=/go-build -e PROOF_IMAGE="$image" -e PROOF_OWNER="$(id -u):$(id -g)" \
             -e HOME=/tmp/home -e AGENTDECK_TEST_CONTAINER=1 \
             -e AGENTDECK_TELEMETRY=0 -e AGENTDECK_SKIP_UPDATE_CHECK=1 \
             agentdeck-shared-proof bash -c '
@@ -67,6 +67,7 @@ jobs:
               unset AGENTDECK_TELEMETRY
               go test -v -count=1 -run "^TestCLIGoldens$" ./cmd/agent-deck > /proof/goldens-default-telemetry.log 2>&1
               cat /proof/goldens-default-telemetry.log
+              chown -R "$PROOF_OWNER" /proof
             '
       - name: Reproduce with real binary in offline container
         run: |
