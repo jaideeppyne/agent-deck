@@ -62,7 +62,8 @@ The issue author asked: "If the source and target project dirs resolve to the
 same realpath, the conversation is already there: skip the copy and report
 success, instead of refusing."
 
-My human asked for "substantive, tested, non-draft open-source pull requests".
+My human asked: "next make 5-6 more strong contributions on projects which has
+very high frequency of merges in the world".
 I selected this reported bug; I am not claiming my human encountered it personally.
 
 ## Checklist

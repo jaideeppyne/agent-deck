@@ -8,7 +8,7 @@ jobs:
   reproduce:
     if: github.repository == 'jaideeppyne/agent-deck'
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
         with:
@@ -19,8 +19,12 @@ jobs:
       - name: Build affected binary and observe test-first failure
         run: |
           mkdir proof
-          docker run --rm --mount type=bind,src="$PWD",dst=/src,readonly \
+          image=$(docker image inspect agentdeck-shared-proof --format '{{.Id}}')
+          docker run --rm --init --mount type=bind,src="$PWD",dst=/src,readonly \
             --mount type=bind,src="$PWD/proof",dst=/proof \
+            --mount type=volume,src=shared-proof-modules,dst=/go/pkg/mod \
+            --mount type=volume,src=shared-proof-build,dst=/go-build \
+            -e GOCACHE=/go-build -e PROOF_IMAGE="$image" \
             -e HOME=/tmp/home -e AGENTDECK_TEST_CONTAINER=1 \
             -e AGENTDECK_TELEMETRY=0 -e AGENTDECK_SKIP_UPDATE_CHECK=1 \
             agentdeck-shared-proof bash -c '
@@ -38,32 +42,31 @@ jobs:
               go vet ./...
               go build -o /proof/agent-deck-old ./cmd/agent-deck
               set +e
-              go test -v -count=1 -run "TestSwitchSharedProjectsStore|TestMigrateSharedProjectsStoreIsNoOp|TestSessionSwitchAccount_SharedProjectsStore" ./internal/session ./cmd/agent-deck > /proof/regression-old.log 2>&1
+              python3 /src/.verification/evidence.py regression --out /proof/regression-old --image "$PROOF_IMAGE"
               rc=$?
               set -e
-              cat /proof/regression-old.log
-              echo "$rc" > /proof/regression-old-exit.txt
               test "$rc" -eq 1
-              grep -q "already-shared store refused" /proof/regression-old.log
-              ! grep -q "build failed" /proof/regression-old.log
+              grep -q "already-shared store refused" /proof/regression-old/output.log
+              ! grep -q "build failed" /proof/regression-old/output.log
               cd /tmp/fixed
               go vet ./...
               go build -o /proof/agent-deck-fixed ./cmd/agent-deck
               set +e
-              go test -v -count=1 -run "TestSwitchSharedProjectsStore|TestMigrateSharedProjectsStoreIsNoOp|TestSessionSwitchAccount_SharedProjectsStore" ./internal/session ./cmd/agent-deck > /proof/regression-fixed.log 2>&1
+              python3 /src/.verification/evidence.py regression --out /proof/regression-fixed --image "$PROOF_IMAGE"
               rc=$?
               set -e
-              cat /proof/regression-fixed.log
-              echo "$rc" > /proof/regression-fixed-exit.txt
               test "$rc" -eq 0
+              # Demonstrate the prior golden failure before correcting the environment.
               set +e
-              FULL_TESTS=1 BASE_REF=036915808f43363ca9d54e77ce1fc0706b82029c \
-                .github/skills/agent-deck-contributor/scripts/self-check.sh /src/.verification/pr-body.md > /proof/self-check.log 2>&1
+              go test -v -count=1 -run "^TestCLIGoldens$" ./cmd/agent-deck > /proof/goldens-forced-telemetry.log 2>&1
               rc=$?
               set -e
-              cat /proof/self-check.log
-              test "$rc" -eq 0
-              grep -q "Ready to open" /proof/self-check.log
+              cat /proof/goldens-forced-telemetry.log
+              test "$rc" -eq 1
+              grep -q "AGENTDECK_TELEMETRY is set" /proof/goldens-forced-telemetry.log
+              unset AGENTDECK_TELEMETRY
+              go test -v -count=1 -run "^TestCLIGoldens$" ./cmd/agent-deck > /proof/goldens-default-telemetry.log 2>&1
+              cat /proof/goldens-default-telemetry.log
             '
       - name: Reproduce with real binary in offline container
         run: |
@@ -81,33 +84,40 @@ jobs:
           cat proof/repro-fixed/output.log
           grep -q 'ORACLE: shared-store account switch succeeded without transcript changes' proof/repro-fixed/output.log
           sha256sum proof/agent-deck-old proof/agent-deck-fixed .verification/repro.sh .verification/fixtures/repro.py
+          python3 .verification/evidence.py finalize --out proof
+          python3 skills/deck-repro/scripts/validate.py proof/result.json --require-status fixed
+      - name: Full contributor self-check with receipt manifest
+        run: |
+          docker run --rm --init --mount type=bind,src="$PWD",dst=/src,readonly \
+            --mount type=bind,src="$PWD/proof",dst=/proof \
+            --mount type=volume,src=shared-proof-modules,dst=/go/pkg/mod \
+            --mount type=volume,src=shared-proof-build,dst=/go-build \
+            -e GOCACHE=/go-build -e HOME=/tmp/home -e AGENTDECK_TEST_CONTAINER=1 \
+            -e AGENTDECK_SKIP_UPDATE_CHECK=1 agentdeck-shared-proof bash -c '
+              set -eu
+              mkdir -p "$HOME"
+              git clone --no-hardlinks /src /tmp/check
+              cd /tmp/check
+              git checkout 7831796b53d8eb9d093ab42a0206465bdf3c29f9
+              set +e
+              FULL_TESTS=1 REPRO_REPORT=/proof/result.json BASE_REF=036915808f43363ca9d54e77ce1fc0706b82029c \
+                .github/skills/agent-deck-contributor/scripts/self-check.sh /src/.verification/pr-body.md > /proof/self-check.log 2>&1
+              rc=$?
+              set -e
+              cat /proof/self-check.log
+              test "$rc" -eq 0
+              grep -q "Ready to open" /proof/self-check.log
+            '
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: shared-store-fixed-proof
           path: |
             proof/*.log
-            proof/*-exit.txt
+            proof/result.json
+            proof/regression-*/receipt.json
+            proof/regression-*/output.log
             proof/repro-*/receipt.json
             proof/repro-*/output.log
             proof/repro-*/container.json
-          retention-days: 7
-  ci-checks:
-    if: github.repository == 'jaideeppyne/agent-deck'
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: 7831796b53d8eb9d093ab42a0206465bdf3c29f9
-          persist-credentials: false
-      - name: Repository CI-equivalent verification
-        run: |
-          set -o pipefail
-          make verify-docker 2>&1 | tee "$RUNNER_TEMP/verify-docker.log"
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: shared-store-ci-proof
-          path: ${{ runner.temp }}/verify-docker.log
           retention-days: 7
