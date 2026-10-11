@@ -1,0 +1,62 @@
+name: Contributor shared-store proof (fork only)
+on:
+  push:
+    branches: ['verify/shared-projects-*']
+permissions:
+  contents: read
+jobs:
+  reproduce:
+    if: github.repository == 'jaideeppyne/agent-deck'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Build isolated verification image
+        run: docker build -t agentdeck-shared-proof -f .verification/Dockerfile .verification
+      - name: Build affected binary and observe test-first failure
+        run: |
+          mkdir proof
+          docker run --rm --mount type=bind,src="$PWD",dst=/src,readonly \
+            --mount type=bind,src="$PWD/proof",dst=/proof \
+            -e HOME=/tmp/home -e AGENTDECK_TEST_CONTAINER=1 \
+            -e AGENTDECK_TELEMETRY=0 -e AGENTDECK_SKIP_UPDATE_CHECK=1 \
+            agentdeck-shared-proof bash -c '
+              set -eu
+              mkdir -p "$HOME"
+              cp -R /src /tmp/src
+              cd /tmp/src
+              go version
+              git rev-parse HEAD
+              go vet ./...
+              go build -o /proof/agent-deck ./cmd/agent-deck
+              set +e
+              go test -v -count=1 -run "TestSwitchSharedProjectsStore|TestMigrateSharedProjectsStoreIsNoOp|TestSessionSwitchAccount_SharedProjectsStore" ./internal/session ./cmd/agent-deck > /proof/regression.log 2>&1
+              rc=$?
+              set -e
+              cat /proof/regression.log
+              echo "$rc" > /proof/regression-exit.txt
+              test "$rc" -eq 1
+              grep -q "already-shared store refused" /proof/regression.log
+              ! grep -q "build failed" /proof/regression.log
+            '
+      - name: Reproduce with real binary in offline container
+        run: |
+          image=$(docker image inspect agentdeck-shared-proof --format '{{.Id}}')
+          set +e
+          python3 skills/deck-repro/scripts/run.py --image "$image" --binary proof/agent-deck \
+            --script .verification/repro.sh --fixtures .verification/fixtures --out proof/repro-old --timeout 120
+          rc=$?
+          set -e
+          cat proof/repro-old/output.log
+          test "$rc" -eq 1
+          grep -q 'ORACLE: shared-store refusal reproduced' proof/repro-old/output.log
+          sha256sum proof/agent-deck .verification/repro.sh .verification/fixtures/repro.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: shared-store-baseline-proof
+          path: proof
+          retention-days: 7
