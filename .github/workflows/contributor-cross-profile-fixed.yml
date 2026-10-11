@@ -1,7 +1,7 @@
 name: Contributor cross-profile fixed proof (fork only)
 on:
   push:
-    branches: ['verify/cross-profile-fixed', 'verify/cross-profile-diagnostics']
+    branches: ['verify/cross-profile-fixed', 'verify/cross-profile-diagnostics', 'verify/cross-profile-secure-final']
 permissions:
   contents: read
 jobs:
@@ -34,8 +34,8 @@ jobs:
               cd /tmp/src
               go version
               git rev-parse HEAD
-              git worktree add /tmp/fixed e69a224f8230d4232eed05e4a971dede32a78e8b
-              git worktree add /tmp/base 036915808f43363ca9d54e77ce1fc0706b82029c
+              git worktree add /tmp/fixed a0ee64e1114f1627bfe6ce106a540b0d49437d88
+              git worktree add /tmp/base e69a224f8230d4232eed05e4a971dede32a78e8b
               for revision in base fixed; do
                 cd /tmp/$revision
                 set +e
@@ -54,8 +54,9 @@ jobs:
               rc=$?
               set -e
               test "$rc" -eq 1
-              grep -q "caller account leaked across profile selection" /proof/regression-old/output.log
-              ! grep -q "build failed" /proof/regression-old/output.log
+              grep -q "caller secure-storage selector leaked" /proof/regression-old/output.log
+              grep -q "profile/account help is missing" /proof/regression-old/output.log
+              ! grep -q "build failed\|marker unavailable" /proof/regression-old/output.log
               cd /tmp/fixed
               go vet ./...
               go build -o /proof/agent-deck-fixed ./cmd/agent-deck
@@ -87,11 +88,11 @@ jobs:
           set -e
           cat proof/repro-old/output.log
           test "$rc" -eq 1
-          grep -q 'ORACLE: cross-profile launch inherited caller account' proof/repro-old/output.log
+          grep -q 'ORACLE: caller secure-storage selector leaked across profiles' proof/repro-old/output.log
           python3 skills/deck-repro/scripts/run.py --image "$image" --binary proof/agent-deck-fixed \
             --script .verification/repro.sh --fixtures .verification/fixtures --out proof/repro-fixed --timeout 120
           cat proof/repro-fixed/output.log
-          grep -q 'ORACLE: cross-profile launch used target profile account' proof/repro-fixed/output.log
+          grep -q 'ORACLE: cross-profile launch used only target profile selectors' proof/repro-fixed/output.log
           sha256sum proof/agent-deck-old proof/agent-deck-fixed .verification/repro.sh .verification/fixtures/repro.py
           python3 .verification/evidence.py finalize --out proof
           python3 skills/deck-repro/scripts/validate.py proof/result.json --require-status fixed
@@ -107,7 +108,7 @@ jobs:
               mkdir -p "$HOME"
               cp -R /src /tmp/check
               cd /tmp/check
-              git checkout e69a224f8230d4232eed05e4a971dede32a78e8b
+              git checkout a0ee64e1114f1627bfe6ce106a540b0d49437d88
               set +e
               FULL_TESTS=1 REPRO_REPORT=/proof/result.json BASE_REF=036915808f43363ca9d54e77ce1fc0706b82029c \
                 bash -x .github/skills/agent-deck-contributor/scripts/self-check.sh /src/.verification/pr-body.md > /proof/self-check.log 2>&1
@@ -137,7 +138,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: e69a224f8230d4232eed05e4a971dede32a78e8b
+          ref: a0ee64e1114f1627bfe6ce106a540b0d49437d88
           persist-credentials: false
       - name: Repository CI-equivalent verification
         run: |

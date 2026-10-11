@@ -8,7 +8,8 @@ requested storage profile. Fixes #2632.
 
 The explicit profile boundary already captures the caller's profile. When the
 requested profile differs from a nonempty caller profile, remove the inherited
-account and Claude config override so the selected profile's configuration wins.
+account, Claude config override and secure-storage selector so the selected
+profile's configuration wins. Global help documents this precedence.
 Explicit --account is still resolved afterward. Same-profile, no-flag and
 unknown caller-profile cases preserve their existing precedence.
 
@@ -24,19 +25,20 @@ scripts keep their inherited variables, including absent versus empty values.
 
 ## Evidence
 
-Affected revision: 036915808f43363ca9d54e77ce1fc0706b82029c.
-Initial baseline: https://github.com/jaideeppyne/agent-deck/actions/runs/38143598381.
+Affected review revision: e69a224f8230d4232eed05e4a971dede32a78e8b.
+Tests-first baseline: https://github.com/jaideeppyne/agent-deck/actions/runs/38178697660.
 
     agent-deck -p work launch ... --cmd claude --no-wait --json
     profile: work
-    CHILD_CONFIG_DIR: /work/home/.claude-it
-    PERSISTED_ACCOUNT: 'it'
-    ORACLE: cross-profile launch inherited caller account
+    CHILD_CONFIG_DIR: /work/home/.claude-work
+    CHILD_SECURESTORAGE_CONFIG_DIR: '/work/home/.claude-it'
+    PERSISTED_ACCOUNT: ''
+    ORACLE: caller secure-storage selector leaked across profiles
 
 The original binary was run offline with fresh HOME/XDG and private tmux; only
 the external paid tool was replaced by a shim recording its actual environment.
-The regression fails on the baseline for both launched config dir and persisted
-account, while explicit-account and same-profile controls pass. Fixed binary,
+The regression fails on the published baseline for the leaked secure-storage
+selector and missing help, while explicit-account and same-profile controls pass. Fixed binary,
 full sandboxed suite and before/after startup timings are being verified before
 publication. No host Go tests, real Claude login or paid model invocation.
 

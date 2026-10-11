@@ -38,9 +38,9 @@ def regression(args):
 def finalize(args):
     root = pathlib.Path(args.out)
     checks = {
-        "repro-old": (1, "ORACLE: cross-profile launch inherited caller account"),
-        "repro-fixed": (0, "ORACLE: cross-profile launch used target profile account"),
-        "regression-old": (1, "caller account leaked across profile selection"),
+        "repro-old": (1, "ORACLE: caller secure-storage selector leaked across profiles"),
+        "repro-fixed": (0, "ORACLE: cross-profile launch used only target profile selectors"),
+        "regression-old": (1, "caller secure-storage selector leaked"),
         "regression-fixed": (0, "--- PASS: TestCrossProfileLaunchUsesSelectedAccount"),
     }
     for name, (expected, evidence) in checks.items():
@@ -57,9 +57,9 @@ def finalize(args):
                               "oracle_review": "automated text check; independent AI inspection follows before publication"})
     write(root / "result.json", {
         "schema_version": 1, "candidate_id": "agent-deck-2632", "status": "fixed",
-        "oracle": "Cross-profile launch uses the target profile's Claude directory, not the caller's inherited account.",
-        "affected_revision": "036915808f43363ca9d54e77ce1fc0706b82029c",
-        "fixed_revision": "e69a224f8230d4232eed05e4a971dede32a78e8b",
+        "oracle": "Cross-profile launch uses the target profile's Claude directory and drops the caller's inherited secure-storage selector.",
+        "affected_revision": "e69a224f8230d4232eed05e4a971dede32a78e8b",
+        "fixed_revision": "a0ee64e1114f1627bfe6ce106a540b0d49437d88",
         "reproduction": {"old_receipt": "repro-old/receipt.json", "fixed_receipt": "repro-fixed/receipt.json"},
         "regression": {"test": "TestCrossProfileAccountEnvironment and TestCrossProfileLaunchUsesSelectedAccount",
                        "old_receipt": "regression-old/receipt.json", "fixed_receipt": "regression-fixed/receipt.json"},
