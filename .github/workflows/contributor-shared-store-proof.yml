@@ -30,33 +30,51 @@ jobs:
               cd /tmp/src
               go version
               git rev-parse HEAD
+              git worktree add /tmp/fixed acb294272c8167d786f1ba2c632969566ca52a2a
+              git worktree add /tmp/base 036915808f43363ca9d54e77ce1fc0706b82029c
+              cp /tmp/fixed/internal/session/shared_projects_store_test.go /tmp/base/internal/session/
+              cp /tmp/fixed/cmd/agent-deck/shared_projects_store_test.go /tmp/base/cmd/agent-deck/
+              cd /tmp/base
               go vet ./...
-              go build -o /proof/agent-deck ./cmd/agent-deck
+              go build -o /proof/agent-deck-old ./cmd/agent-deck
               set +e
-              go test -v -count=1 -run "TestSwitchSharedProjectsStore|TestMigrateSharedProjectsStoreIsNoOp|TestSessionSwitchAccount_SharedProjectsStore" ./internal/session ./cmd/agent-deck > /proof/regression.log 2>&1
+              go test -v -count=1 -run "TestSwitchSharedProjectsStore|TestMigrateSharedProjectsStoreIsNoOp|TestSessionSwitchAccount_SharedProjectsStore" ./internal/session ./cmd/agent-deck > /proof/regression-old.log 2>&1
               rc=$?
               set -e
-              cat /proof/regression.log
-              echo "$rc" > /proof/regression-exit.txt
+              cat /proof/regression-old.log
+              echo "$rc" > /proof/regression-old-exit.txt
               test "$rc" -eq 1
-              grep -q "already-shared store refused" /proof/regression.log
-              ! grep -q "build failed" /proof/regression.log
+              grep -q "already-shared store refused" /proof/regression-old.log
+              ! grep -q "build failed" /proof/regression-old.log
+              cd /tmp/fixed
+              go vet ./...
+              go build -o /proof/agent-deck-fixed ./cmd/agent-deck
+              go test -v -count=1 -run "TestSwitchSharedProjectsStore|TestMigrateSharedProjectsStoreIsNoOp|TestSessionSwitchAccount_SharedProjectsStore" ./internal/session ./cmd/agent-deck > /proof/regression-fixed.log 2>&1
+              cat /proof/regression-fixed.log
+              FULL_TESTS=1 BASE_REF=036915808f43363ca9d54e77ce1fc0706b82029c \
+                .github/skills/agent-deck-contributor/scripts/self-check.sh /src/.verification/pr-body.md > /proof/self-check.log 2>&1
+              cat /proof/self-check.log
+              grep -q "Ready to open" /proof/self-check.log
             '
       - name: Reproduce with real binary in offline container
         run: |
           image=$(docker image inspect agentdeck-shared-proof --format '{{.Id}}')
           set +e
-          python3 skills/deck-repro/scripts/run.py --image "$image" --binary proof/agent-deck \
+          python3 skills/deck-repro/scripts/run.py --image "$image" --binary proof/agent-deck-old \
             --script .verification/repro.sh --fixtures .verification/fixtures --out proof/repro-old --timeout 120
           rc=$?
           set -e
           cat proof/repro-old/output.log
           test "$rc" -eq 1
           grep -q 'ORACLE: shared-store refusal reproduced' proof/repro-old/output.log
-          sha256sum proof/agent-deck .verification/repro.sh .verification/fixtures/repro.py
+          python3 skills/deck-repro/scripts/run.py --image "$image" --binary proof/agent-deck-fixed \
+            --script .verification/repro.sh --fixtures .verification/fixtures --out proof/repro-fixed --timeout 120
+          cat proof/repro-fixed/output.log
+          grep -q 'ORACLE: shared-store account switch succeeded without transcript changes' proof/repro-fixed/output.log
+          sha256sum proof/agent-deck-old proof/agent-deck-fixed .verification/repro.sh .verification/fixtures/repro.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: shared-store-baseline-proof
+          name: shared-store-fixed-proof
           path: proof
           retention-days: 7
