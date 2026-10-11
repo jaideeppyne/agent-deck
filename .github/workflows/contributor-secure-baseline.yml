@@ -1,0 +1,68 @@
+name: Contributor secure-storage baseline (fork only)
+on:
+  push:
+    branches: ['verify/cross-profile-secure-baseline']
+permissions:
+  contents: read
+jobs:
+  reproduce:
+    if: github.repository == 'jaideeppyne/agent-deck'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Build isolated image
+        run: docker build -t secure-baseline -f .verification/Dockerfile .verification
+      - name: Observe published-source regression before editing production
+        run: |
+          mkdir proof
+          docker run --rm --init --mount type=bind,src="$PWD",dst=/src,readonly \
+            --mount type=bind,src="$PWD/proof",dst=/proof \
+            -e HOME=/tmp/home -e AGENTDECK_TEST_CONTAINER=1 \
+            -e AGENTDECK_SKIP_UPDATE_CHECK=1 secure-baseline bash -c '
+              set -eu
+              mkdir -p "$HOME"
+              cp -R /src /tmp/src
+              cd /tmp/src
+              git worktree add /tmp/base e69a224f8230d4232eed05e4a971dede32a78e8b
+              git show 3622be4506ec15390010f7a5bbbfd8930bb5c113:cmd/agent-deck/cross_profile_account_test.go > /tmp/base/cmd/agent-deck/cross_profile_account_test.go
+              cd /tmp/base
+              go version
+              git rev-parse HEAD
+              sha256sum cmd/agent-deck/cross_profile_account_test.go
+              go vet ./...
+              go build -o /proof/agent-deck-old ./cmd/agent-deck
+              set +e
+              go test -v -count=1 -run "^TestCrossProfile" ./cmd/agent-deck > /proof/baseline.log 2>&1
+              rc=$?
+              set -e
+              cat /proof/baseline.log
+              test "$rc" -eq 1
+              grep -q "caller secure-storage selector leaked" /proof/baseline.log
+              grep -q "profile/account help is missing" /proof/baseline.log
+              ! grep -q "build failed\|marker unavailable" /proof/baseline.log
+            '
+      - name: Observe actual child environment in offline binary reproduction
+        run: |
+          image=$(docker image inspect secure-baseline --format '{{.Id}}')
+          set +e
+          python3 skills/deck-repro/scripts/run.py --image "$image" --binary proof/agent-deck-old \
+            --script .verification/repro.sh --fixtures .verification/fixtures --out proof/repro-old --timeout 120
+          rc=$?
+          set -e
+          cat proof/repro-old/output.log
+          test "$rc" -eq 1
+          grep -q 'ORACLE: caller secure-storage selector leaked across profiles' proof/repro-old/output.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: secure-storage-baseline
+          path: |
+            proof/baseline.log
+            proof/repro-old/output.log
+            proof/repro-old/receipt.json
+            proof/repro-old/container.json
+          retention-days: 7

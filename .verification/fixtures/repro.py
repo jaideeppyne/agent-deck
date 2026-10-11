@@ -21,15 +21,18 @@ for account in ("it", "work"):
 shim_dir = home / "bin"
 shim_dir.mkdir()
 marker = home / "child-config-dir"
+secure_marker = home / "child-secure-dir"
 shim = shim_dir / "claude"
 shim.write_text(
     '#!/bin/sh\nif [ "$1" = "--version" ]; then echo 2.0.0; exit 0; fi\n'
+    'printf "%s" "$CLAUDE_SECURESTORAGE_CONFIG_DIR" > ' + shlex.quote(str(secure_marker)) + '\n' +
     'printf "%s" "$CLAUDE_CONFIG_DIR" > ' + shlex.quote(str(marker)) +
     '\nexec sleep 60\n')
 shim.chmod(0o700)
 os.environ.update(
     AGENTDECK_PROFILE="it", AGENTDECK_ACCOUNT="it",
     CLAUDE_CONFIG_DIR=str(home / ".claude-it"),
+    CLAUDE_SECURESTORAGE_CONFIG_DIR=str(home / ".claude-it"),
     AGENTDECK_SKIP_UPDATE_CHECK="1",
     PATH=str(shim_dir) + os.pathsep + os.environ["PATH"])
 
@@ -79,13 +82,15 @@ try:
     if state.get("profile") != "work":
         raise RuntimeError("fixture did not select target storage profile")
     account = state.get("account", "")
+    secure_dir = secure_marker.read_text()
     print("CHILD_CONFIG_DIR:", child_dir, flush=True)
+    print("CHILD_SECURESTORAGE_CONFIG_DIR:", repr(secure_dir), flush=True)
     print("PERSISTED_ACCOUNT:", repr(account), flush=True)
-    if child_dir == str(home / ".claude-it") and account == "it":
-        print("ORACLE: cross-profile launch inherited caller account", flush=True)
+    if child_dir == str(home / ".claude-work") and account == "" and secure_dir == str(home / ".claude-it"):
+        print("ORACLE: caller secure-storage selector leaked across profiles", flush=True)
         code = 1
-    elif child_dir == str(home / ".claude-work") and account == "":
-        print("ORACLE: cross-profile launch used target profile account", flush=True)
+    elif child_dir == str(home / ".claude-work") and account == "" and secure_dir == "":
+        print("ORACLE: cross-profile launch used only target profile selectors", flush=True)
         code = 0
     else:
         raise RuntimeError("unexpected selection; not a proven red or green oracle")
