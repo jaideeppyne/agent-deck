@@ -1,0 +1,55 @@
+name: Contributor legacy shared-store recheck (fork only)
+on:
+  push:
+    branches: ['verify/shared-legacy-recheck-baseline']
+permissions:
+  contents: read
+jobs:
+  baseline:
+    if: github.repository == 'jaideeppyne/agent-deck'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Build isolated test image
+        run: docker build -t legacy-recheck -f .verification/Dockerfile .verification
+      - name: Reproduce published-code identity race without production instrumentation
+        run: |
+          mkdir proof
+          docker run --rm --init --mount type=bind,src="$PWD",dst=/src,readonly \
+            --mount type=bind,src="$PWD/proof",dst=/proof \
+            -e HOME=/tmp/home -e AGENTDECK_TEST_CONTAINER=1 \
+            -e AGENTDECK_SKIP_UPDATE_CHECK=1 legacy-recheck bash -c '
+              set -eu
+              mkdir -p "$HOME"
+              cp -R /src /tmp/src
+              cd /tmp/src
+              git worktree add /tmp/base 15a217d47b89300ea82f2f84a9b7d443673380be
+              cp /src/internal/session/shared_projects_store_test.go /tmp/base/internal/session/
+              cd /tmp/base
+              go version
+              git rev-parse HEAD
+              sha256sum internal/session/shared_projects_store_test.go
+              go vet ./internal/session
+              set +e
+              go test -race -v -count=3 -run "^TestMigrateSharedProjectsStoreRechecksBeforeSuccess$" \
+                ./internal/session > /proof/baseline.log 2>&1
+              rc=$?
+              set -e
+              cat /proof/baseline.log
+              test "$rc" -eq 1
+              grep -q "PASS: TestMigrateSharedProjectsStoreRechecksBeforeSuccess/unchanged" /proof/baseline.log
+              for mode in target-link source-link both-links replace-directory; do
+                test "$(grep -c "FAIL: TestMigrateSharedProjectsStoreRechecksBeforeSuccess/$mode" /proof/baseline.log)" -eq 3
+              done
+              ! grep -q "DATA RACE\|build failed\|migration must be parked\|migration did not finish" /proof/baseline.log
+            '
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: legacy-shared-store-baseline
+          path: proof/baseline.log
+          retention-days: 7
