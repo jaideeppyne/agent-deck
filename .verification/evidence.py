@@ -18,7 +18,7 @@ def regression(args):
     out = pathlib.Path(args.out)
     out.mkdir(parents=True, exist_ok=False)
     command = ["go", "test", "-v", "-count=1", "-run",
-               "^TestCrossProfile", "./cmd/agent-deck"]
+               "^Test(CrossProfile|UsageStatuslineAccountAndPermissionMode)", "./cmd/agent-deck"]
     tests = ["cmd/agent-deck/cross_profile_account_test.go"]
     receipt = {"command": command, "script_sha256": digest(pathlib.Path(__file__)),
                "fixtures": {p: digest(pathlib.Path(p)) for p in tests},
@@ -59,7 +59,7 @@ def finalize(args):
         "schema_version": 1, "candidate_id": "agent-deck-2632", "status": "fixed",
         "oracle": "Cross-profile launch uses the target profile's Claude directory, not the caller's inherited account.",
         "affected_revision": "036915808f43363ca9d54e77ce1fc0706b82029c",
-        "fixed_revision": "7b3a45b85fb8304987d866be2625dd759073b49e",
+        "fixed_revision": "e69a224f8230d4232eed05e4a971dede32a78e8b",
         "reproduction": {"old_receipt": "repro-old/receipt.json", "fixed_receipt": "repro-fixed/receipt.json"},
         "regression": {"test": "TestCrossProfileAccountEnvironment and TestCrossProfileLaunchUsesSelectedAccount",
                        "old_receipt": "regression-old/receipt.json", "fixed_receipt": "regression-fixed/receipt.json"},
