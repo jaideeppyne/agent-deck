@@ -33,6 +33,14 @@ receipt identifies the conversation already present in the shared store.
 
 ## Evidence
 
+Review follow-up source ce4c577 adds deterministic legacy identity-recheck tests
+and real TUI/loopback-SSH coverage. The oversized diff is inseparable safety
+coverage for the same no-copy account switch, not unrelated features. Splitting
+these into separate contributions would leave the core fix without requested
+guards; no artificial PR splitting. The internal legacy race is source-level
+evidence, not a claimed external CLI race reproduction; the original account
+switch still has separate real-binary paired receipts.
+
 Baseline production revision: `036915808f43363ca9d54e77ce1fc0706b82029c`.
 Initial isolated proof: https://github.com/jaideeppyne/agent-deck/actions/runs/38126087343.
 

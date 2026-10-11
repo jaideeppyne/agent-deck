@@ -18,10 +18,11 @@ def regression(args):
     out = pathlib.Path(args.out)
     out.mkdir(parents=True, exist_ok=False)
     command = ["go", "test", "-v", "-count=1", "-run",
-               "TestSwitchSharedProjectsStore|TestMigrateSharedProjectsStore|TestSessionSwitchAccount_SharedProjectsStore",
-               "./internal/session", "./cmd/agent-deck"]
+               "TestSwitchSharedProjectsStore|TestMigrateSharedProjectsStore(IsNoOp|Identity)$|TestSessionSwitchAccount_SharedProjectsStore$|TestHomeSwitchAccountSharedProjectsStore$",
+               "./internal/session", "./cmd/agent-deck", "./internal/ui"]
     tests = ["internal/session/shared_projects_store_test.go",
-             "cmd/agent-deck/shared_projects_store_test.go"]
+             "cmd/agent-deck/shared_projects_store_test.go",
+             "internal/ui/shared_projects_store_test.go"]
     receipt = {"command": command, "script_sha256": digest(pathlib.Path(__file__)),
                "fixtures": {p: digest(pathlib.Path(p)) for p in tests},
                "experiment": {"image_id": args.image, "timeout_seconds": 180},
@@ -61,7 +62,7 @@ def finalize(args):
         "schema_version": 1, "candidate_id": "agent-deck-2639", "status": "fixed",
         "oracle": "Shared-store account switch succeeds without changing transcripts; separate-store symlink refusal remains nonzero.",
         "affected_revision": "036915808f43363ca9d54e77ce1fc0706b82029c",
-        "fixed_revision": "15a217d47b89300ea82f2f84a9b7d443673380be",
+        "fixed_revision": "ce4c577ef8bf054216cb9347b6dd39a3d2040810",
         "reproduction": {"old_receipt": "repro-old/receipt.json", "fixed_receipt": "repro-fixed/receipt.json"},
         "regression": {"test": "TestSessionSwitchAccount_SharedProjectsStore and session shared-store safety cases",
                        "old_receipt": "regression-old/receipt.json", "fixed_receipt": "regression-fixed/receipt.json"},
