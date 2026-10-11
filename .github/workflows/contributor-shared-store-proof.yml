@@ -97,7 +97,7 @@ jobs:
             -e AGENTDECK_SKIP_UPDATE_CHECK=1 agentdeck-shared-proof bash -c '
               set -eu
               mkdir -p "$HOME"
-              git clone --no-hardlinks /src /tmp/check
+              cp -R /src /tmp/check
               cd /tmp/check
               git checkout 7831796b53d8eb9d093ab42a0206465bdf3c29f9
               set +e
