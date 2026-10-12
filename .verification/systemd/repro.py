@@ -19,6 +19,8 @@ home = root / "home"
 binary = root / "agent-deck"
 source_binary = pathlib.Path(sys.argv[1]).resolve()
 proof = pathlib.Path(sys.argv[2]).resolve()
+source_revision = sys.argv[3]
+vm_image = os.environ["PROOF_VM_IMAGE"]
 proof.mkdir(parents=True, exist_ok=True)
 shutil.copy2(source_binary, binary)
 binary.chmod(0o755)
@@ -150,13 +152,16 @@ finally:
     (proof / "output.log").write_text(output)
     receipt = {
         "command": ["python3", ".verification/systemd/repro.py", "agent-deck", "receipt"],
-        "exit_code": verdict, "timed_out": False,
+        "exit_code": verdict, "timed_out": "TIMED_OUT:" in output,
+        "source_revision": source_revision,
         "duration_seconds": round(time.monotonic() - started, 3),
         "output_sha256": hashlib.sha256((proof / "output.log").read_bytes()).hexdigest(),
         "binary_sha256": hashlib.sha256(source_binary.read_bytes()).hexdigest(),
         "script_sha256": hashlib.sha256(pathlib.Path(__file__).read_bytes()).hexdigest(),
-        "experiment": {"platform": "disposable GitHub Ubuntu VM user manager", "timeout_seconds": 120},
-        "fixtures": {"setup": "fresh OS user, no log directory, no remote channels, heartbeat disabled"},
+        "experiment": {"image_id": vm_image, "platform": "disposable GitHub Ubuntu VM user manager", "timeout_seconds": 120},
+        "fixtures": {"setup": hashlib.sha256(b"fresh OS user, no log directory, no remote channels, heartbeat disabled").hexdigest()},
+        "oracle_matched": verdict in (0, 1),
+        "oracle_evidence": next((line.strip() for line in lines if line.startswith("ORACLE:")), ""),
     }
     (proof / "receipt.json").write_text(json.dumps(receipt, indent=2) + "\n")
 sys.exit(verdict)

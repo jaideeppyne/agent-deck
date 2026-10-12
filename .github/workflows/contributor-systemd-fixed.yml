@@ -1,0 +1,92 @@
+name: Contributor systemd log-directory verification (fork only)
+on:
+  push:
+    branches: ['verify/systemd-log-dir-fixed']
+permissions:
+  contents: read
+jobs:
+  reproduce:
+    if: github.repository == 'jaideeppyne/agent-deck'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Paired builds and source regression in isolated Docker
+        run: |
+          mkdir -p proof
+          docker build -t systemd-log-proof .verification/systemd
+          image=$(docker image inspect systemd-log-proof --format '{{.Id}}')
+          docker run --rm --init --mount type=bind,src="$PWD",dst=/src,readonly \
+            --mount type=bind,src="$PWD/proof",dst=/proof \
+            -e PROOF_IMAGE_ID="$image" -e HOME=/tmp/build-home -e AGENTDECK_TEST_CONTAINER=1 \
+            -e AGENTDECK_SKIP_UPDATE_CHECK=1 systemd-log-proof bash -c \
+            'set -eu; mkdir -p "$HOME"; cp -R /src /tmp/src; cd /tmp/src; python3 .verification/systemd/build.py'
+      - name: Paired actual CLI and generated systemd unit with disposable user managers
+        run: |
+          : "${ImageOS:?}" "${ImageVersion:?}"
+          vm="github-vm:$ImageOS:$ImageVersion"
+          set +e
+          sudo -n env PROOF_VM_IMAGE="$vm" timeout 120 python3 .verification/systemd/repro.py \
+            proof/agent-deck-old proof/repro-old 8d0f1fe1506dec1405d774c42c178291d1b20f40
+          old_rc=$?
+          sudo -n env PROOF_VM_IMAGE="$vm" timeout 120 python3 .verification/systemd/repro.py \
+            proof/agent-deck-fixed proof/repro-fixed 086db80842d618de2531f6ba1b7f0773942c3757
+          fixed_rc=$?
+          set -e
+          cat proof/repro-old/output.log proof/repro-fixed/output.log
+          test "$old_rc" -eq 1
+          test "$fixed_rc" -eq 0
+          python3 .verification/systemd/finalize.py
+          python3 skills/deck-repro/scripts/validate.py proof/result.json --require-status fixed
+      - name: Full contributor self-check on clean exact source
+        run: |
+          docker run --rm --init --mount type=bind,src="$PWD",dst=/src,readonly \
+            --mount type=bind,src="$PWD/proof",dst=/proof \
+            -e HOME=/tmp/check-home -e AGENTDECK_TEST_CONTAINER=1 \
+            -e AGENTDECK_SKIP_UPDATE_CHECK=1 systemd-log-proof bash -c '
+              set -euo pipefail
+              mkdir -p "$HOME"
+              cp -R /src /tmp/check
+              cd /tmp/check
+              git worktree add /tmp/clean 086db80842d618de2531f6ba1b7f0773942c3757
+              cp /src/.verification/systemd/pr-body.md /tmp/pr-body.md
+              cd /tmp/clean
+              FULL_TESTS=1 BASE_REF=8d0f1fe1506dec1405d774c42c178291d1b20f40 REPRO_REPORT=/proof/result.json \
+                .github/skills/agent-deck-contributor/scripts/self-check.sh /tmp/pr-body.md 2>&1 | tee /proof/self-check.log
+            '
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: systemd-log-proof
+          path: |
+            proof/regression-*/output.log
+            proof/regression-*/receipt.json
+            proof/repro-*/output.log
+            proof/repro-*/receipt.json
+            proof/source-guards.log
+            proof/result.json
+            proof/self-check.log
+          retention-days: 7
+  official-docker-ci:
+    if: github.repository == 'jaideeppyne/agent-deck'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Official five-stage Docker runner on clean source
+        run: |
+          git worktree add /tmp/official-source 086db80842d618de2531f6ba1b7f0773942c3757
+          set -o pipefail
+          make -C /tmp/official-source verify-docker 2>&1 | tee official-docker.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: systemd-log-official-ci
+          path: official-docker.log
+          retention-days: 7
