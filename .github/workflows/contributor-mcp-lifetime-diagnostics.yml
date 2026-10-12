@@ -1,0 +1,97 @@
+name: Contributor MCP lifetime gate diagnostics (fork only)
+on:
+  push:
+    branches: ['verify/mcp-lifetime-diagnostics']
+permissions:
+  contents: read
+jobs:
+  diagnostics:
+    if: github.repository == 'jaideeppyne/agent-deck'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Frozen paired builds and source regression in Docker
+        run: |
+          mkdir -p proof fixtures
+          cp .verification/mcp/fixtures/repro.py fixtures/
+          docker build -t mcp-lifetime-proof -f .verification/mcp/Dockerfile .verification/mcp
+          image=$(docker image inspect mcp-lifetime-proof --format '{{.Id}}')
+          docker run --rm --init --mount type=bind,src="$PWD",dst=/src,readonly \
+            --mount type=bind,src="$PWD/proof",dst=/proof \
+            -e PROOF_IMAGE_ID="$image" -e HOME=/tmp/build-home \
+            -e AGENTDECK_TEST_CONTAINER=1 -e AGENTDECK_SKIP_UPDATE_CHECK=1 \
+            mcp-lifetime-proof bash -c 'set -eu; mkdir -p "$HOME"; cp -R /src /tmp/src; cd /tmp/src; python3 .verification/mcp/build.py'
+      - name: Same paired actual CLI EOF reproduction
+        run: |
+          image=$(docker image inspect mcp-lifetime-proof --format '{{.Id}}')
+          set +e
+          python3 skills/deck-repro/scripts/run.py --image "$image" --binary proof/agent-deck-old \
+            --script .verification/mcp/repro.sh --fixtures fixtures --out proof/repro-old --timeout 120
+          old_rc=$?
+          python3 skills/deck-repro/scripts/run.py --image "$image" --binary proof/agent-deck-fixed \
+            --script .verification/mcp/repro.sh --fixtures fixtures --out proof/repro-fixed --timeout 120
+          fixed_rc=$?
+          set -e
+          test "$old_rc" -eq 1
+          test "$fixed_rc" -eq 0
+          python3 .verification/mcp/finalize.py
+          python3 skills/deck-repro/scripts/validate.py proof/result.json --require-status fixed
+      - name: Paired controls then full original gate with additional output capture
+        run: |
+          docker run --rm --init --mount type=bind,src="$PWD",dst=/src,readonly \
+            --mount type=bind,src="$PWD/proof",dst=/proof \
+            -e HOME=/tmp/check-home -e AGENTDECK_TEST_CONTAINER=1 \
+            -e AGENTDECK_SKIP_UPDATE_CHECK=1 mcp-lifetime-proof bash -c '
+              set -euo pipefail
+              mkdir -p "$HOME" /proof/go-trace
+              cp -R /src /tmp/check
+              cd /tmp/check
+              git worktree add /tmp/old 8d0f1fe1506dec1405d774c42c178291d1b20f40
+              git worktree add /tmp/clean e4d53b07234d7826c4d670747624d7988544f2c6
+              for side in old clean; do
+                cd /tmp/$side
+                control_home=$(mktemp -d)
+                set +e
+                HOME="$control_home" XDG_CONFIG_HOME= XDG_DATA_HOME= XDG_CACHE_HOME= CLAUDE_CONFIG_DIR= \
+                  go test -v -count=5 -run "^TestRecall_EveryHarnessEndToEnd$" ./cmd/agent-deck \
+                  2>&1 | tee /proof/recall-control-$side.log
+                recall_rc=${PIPESTATUS[0]}
+                HOME="$control_home" XDG_CONFIG_HOME= XDG_DATA_HOME= XDG_CACHE_HOME= CLAUDE_CONFIG_DIR= \
+                  go test -v -count=5 -run "^TestClaudeConfigDirExport_VisibleInRunningPaneProcess$" ./internal/session \
+                  2>&1 | tee /proof/configdir-control-$side.log
+                config_rc=${PIPESTATUS[0]}
+                set -e
+                printf "side=%s recall_exit=%s config_exit=%s\n" "$side" "$recall_rc" "$config_rc" | tee -a /proof/control-exits.log
+              done
+              cd /tmp/clean
+              cp /src/.verification/mcp/pr-body.md /tmp/pr-body.md
+              go() {
+                command go "$@" 2>&1 | tee "/proof/go-trace/go-$BASHPID-$RANDOM.log"
+                return "${PIPESTATUS[0]}"
+              }
+              export -f go
+              FULL_TESTS=1 BASE_REF=8d0f1fe1506dec1405d774c42c178291d1b20f40 REPRO_REPORT=/proof/result.json \
+                .github/skills/agent-deck-contributor/scripts/self-check.sh /tmp/pr-body.md 2>&1 | tee /proof/self-check.log
+            '
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mcp-lifetime-gate-diagnostics
+          path: |
+            proof/regression-*/output.log
+            proof/regression-*/receipt.json
+            proof/repro-*/output.log
+            proof/repro-*/receipt.json
+            proof/repro-*/container.json
+            proof/source-guards.log
+            proof/pool-reaper-control.log
+            proof/cross-build.log
+            proof/result.json
+            proof/self-check.log
+            proof/*control*.log
+            proof/go-trace/
+          retention-days: 7
