@@ -1,0 +1,56 @@
+name: Contributor MCP zero-write baseline (fork only)
+on:
+  push:
+    branches: [verify/mcp-zero-write-baseline]
+permissions:
+  contents: read
+jobs:
+  baseline:
+    if: github.repository == 'jaideeppyne/agent-deck'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: fbc5422ae9b5e87385a0fb8367a4bf156e300f4c
+          path: candidate
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Original disposable Go test image
+        run: docker build -t mcp-zero-baseline -f .verification/mcp/Dockerfile .verification/mcp
+      - name: Actual CLI half-close regressions on unchanged published source
+        shell: bash
+        run: |
+          mkdir -p proof
+          docker run --rm --init --mount type=bind,src="$PWD/candidate",dst=/src,readonly \
+            --mount type=bind,src="$PWD/proof",dst=/proof \
+            -e HOME=/tmp/test-home -e AGENTDECK_TEST_CONTAINER=1 \
+            -e AGENTDECK_SKIP_UPDATE_CHECK=1 mcp-zero-baseline bash -c '
+              set -euo pipefail
+              mkdir -p "$HOME"
+              cp -R /src /tmp/source
+              cd /tmp/source
+              git diff --exit-code e4d53b07234d7826c4d670747624d7988544f2c6 -- \
+                cmd/agent-deck/mcp_proxy_cmd.go cmd/agent-deck/mcp_proxy_stdin_unix.go \
+                cmd/agent-deck/mcp_proxy_stdin_other.go
+              git rev-parse HEAD > /proof/source.txt
+              set +e
+              timeout 600 go test -race -v -count=3 -run "^TestMCPProxyZeroWrite" ./cmd/agent-deck \
+                > /proof/baseline.log 2>&1
+              rc=$?
+              set -e
+              cat /proof/baseline.log
+              test "$rc" = 1
+              test "$(grep -Fc -- "--- FAIL: TestMCPProxyZeroWriteRecovery/whole-unwritten-request" /proof/baseline.log)" = 3
+              test "$(grep -Fc -- "--- PASS: TestMCPProxyZeroWriteRecovery/continuation-after-written-prefix" /proof/baseline.log)" = 3
+              test "$(grep -Fc -- "--- PASS: TestMCPProxyZeroWriteFixture" /proof/baseline.log)" = 3
+              sha256sum /proof/baseline.log > /proof/SHA256SUMS
+            '
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mcp-zero-write-baseline
+          path: proof
