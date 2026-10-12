@@ -53,7 +53,7 @@ jobs:
               mkdir -p "$HOME"
               cp -R /src /tmp/check
               cd /tmp/check
-              git worktree add /tmp/clean 7e52a792e589431d8015441f2d7a0eea5b15d9e9
+              git worktree add /tmp/clean 0bf12b8be4b1fcd7d3ef14b82b2cc13845074b15
               cp /src/.verification/pr-body.md /tmp/pr-body.md
               cd /tmp/clean
               FULL_TESTS=1 BASE_REF=8d0f1fe1506dec1405d774c42c178291d1b20f40 REPRO_REPORT=/proof/result.json \
@@ -84,7 +84,7 @@ jobs:
           persist-credentials: false
       - name: Official five-stage Docker runner on clean source
         run: |
-          git worktree add /tmp/official-source 7e52a792e589431d8015441f2d7a0eea5b15d9e9
+          git worktree add /tmp/official-source 0bf12b8be4b1fcd7d3ef14b82b2cc13845074b15
           set -o pipefail
           make -C /tmp/official-source verify-docker 2>&1 | tee official-docker.log
       - uses: actions/upload-artifact@v4

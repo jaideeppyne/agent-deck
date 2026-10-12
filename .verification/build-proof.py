@@ -7,7 +7,7 @@ import subprocess
 import time
 
 OLD = "8d0f1fe1506dec1405d774c42c178291d1b20f40"
-FIXED = "7e52a792e589431d8015441f2d7a0eea5b15d9e9"
+FIXED = "0bf12b8be4b1fcd7d3ef14b82b2cc13845074b15"
 ROOT = pathlib.Path("/tmp/src")
 PROOF = pathlib.Path("/proof")
 FIXTURES = pathlib.Path("/fixtures")

@@ -28,7 +28,7 @@ the real socket frame and a durable wrapped peer reply, yet exiting1 with
 the expected idle/fast and busy JSON failures; dropped-message refusal passed.
 An earlier run38181072745 used invalid fixture config and is not defect proof.
 
-This verification pairs current main8d0f1fe with source7e52a79, freezing the
+This verification pairs current main8d0f1fe with source0bf12b8, freezing the
 five-mode CLI fixture and reproduction inputs for both builds. It creates four
 receipts, checks source guards under `-race -count=3`, and runs the full contributor
 self-check and official five-stage Docker runner. Results must be independently
@@ -36,12 +36,20 @@ inspected before publishing this draft body. Only the external paid Claude is
 synthetic: launch, tmux, socket resolver, send and transcript reader are real.
 This is not a live macOS Claude or Slack integration test.
 
+Run38191099260 passed the paired targeted tests, source guards and actual-CLI
+oracles, but failed both full suites: the new fixture did not publish its socket
+record when other tests had already started the shared tmux server. The fixture
+now uses a private tmux server directory per case, with helper stderr captured
+for diagnosis. Both sides and all full gates must be rerun on this exact fixture;
+the failed full run is not treated as success. That run also reported an existing
+storage-watcher TempDir cleanup failure, not claimed fixed by this change.
+
 The same runner records paired startup smoke timings (3 warmups,25 samples) and
 actual send durations, not a general performance claim. The broad self-check
 revert may warn about new helper/API symbols; the independently executable CLI
 regression is the behavioral red/green proof, not a compilation failure.
 
-416 changed lines implement one wait contract and cover its end-to-end fixture,
+421 changed lines implement one wait contract and cover its end-to-end fixture,
 freshness/safety guards and shared budget. The fixture and refusal controls are
 inseparable proof for the behavior change, not a separately shippable feature.
 No dependency, changelog or workflow changes enter the upstream PR.
@@ -58,7 +66,7 @@ No dependency, changelog or workflow changes enter the upstream PR.
 
 My human asked: "next make 5-6 more strong contributions on projects which has
 very high frequency of merges in the world". I selected the existing reported
-conductor failure to improve a real workflow, not a bug personally encountered
+socket-wait failure to improve a real workflow, not a bug personally encountered
 by my human. No personal review or usage is implied.
 
 ## Checklist

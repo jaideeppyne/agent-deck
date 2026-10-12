@@ -21,7 +21,7 @@ manifest = {
     "issue": "https://github.com/asheshgoplani/agent-deck/issues/2640",
     "oracle": "Completed wrapped peer reply exists after actual socket delivery; old CLI times out binding exact prompt, fixed CLI returns it explicitly uncorrelated. Setup failures are not defect evidence.",
     "affected_revision": "8d0f1fe1506dec1405d774c42c178291d1b20f40",
-    "fixed_revision": "7e52a792e589431d8015441f2d7a0eea5b15d9e9",
+    "fixed_revision": "0bf12b8be4b1fcd7d3ef14b82b2cc13845074b15",
     "reproduction": {"script": ".verification/repro.sh", "fixtures": "fixtures/",
                      "old_receipt": "repro-old/receipt.json", "fixed_receipt": "repro-fixed/receipt.json"},
     "regression": {"test": "TestSessionSendSocketWaitPeerReply",
