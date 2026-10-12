@@ -12,6 +12,10 @@ NotBefore for a newly found transcript), UUID, sidechain, complete-record and
 truncation guards remain. Exact tmux and stream prompt binding is unchanged.
 Busy/probe-failed waits return their single unverified JSON result before any
 transcript lookup. Partial replies are errors, not completed responses.
+Socket completion reads the selected turn's end record directly rather than
+pane-global status, which may already describe a later turn. Both transcript
+polling sleeps are capped at the remaining deadline. Help describes the full
+shared --timeout observation/reply budget; exact tmux binding stays intact.
 
 ## User impact
 
@@ -28,8 +32,15 @@ the real socket frame and a durable wrapped peer reply, yet exiting1 with
 the expected idle/fast and busy JSON failures; dropped-message refusal passed.
 An earlier run38181072745 used invalid fixture config and is not defect proof.
 
-This verification pairs current main8d0f1fe with source0bf12b8, freezing the
-five-mode CLI fixture and reproduction inputs for both builds. It creates four
+Published source0bf12b8 passed full run38197086039, but subsequent review found
+back-to-back traffic starvation and completion sleeps exceeding short budgets.
+Tests-first runs38200081687/38200229129 independently demonstrated the actual
+selected complete reply timing out while a later turn was active, all original
+five modes passing, four new CLI modes failing, obsolete help and transcript
+poll deadlines failing behaviorally. These are not compilation failures.
+
+This verification pairs published0bf12b8 with candidate0df6059, freezing the
+nine-mode CLI fixture and reproduction inputs for both builds. It creates four
 receipts, checks source guards under `-race -count=3`, and runs the full contributor
 self-check and official five-stage Docker runner. Results must be independently
 inspected before publishing this draft body. Only the external paid Claude is
@@ -49,9 +60,10 @@ actual send durations, not a general performance claim. The broad self-check
 revert may warn about new helper/API symbols; the independently executable CLI
 regression is the behavioral red/green proof, not a compilation failure.
 
-421 changed lines implement one wait contract and cover its end-to-end fixture,
+491 changed lines implement one wait contract and cover its end-to-end fixture,
 freshness/safety guards and shared budget. The fixture and refusal controls are
 inseparable proof for the behavior change, not a separately shippable feature.
+The review update is part of this same PR, not a new artificially split PR.
 No dependency, changelog or workflow changes enter the upstream PR.
 
 ## AI disclosure

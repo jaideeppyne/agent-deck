@@ -4,13 +4,14 @@ import pathlib
 
 root = pathlib.Path("proof")
 oracles = {
-    "old": "ORACLE: socket wait rejected a completed wrapped peer reply",
-    "fixed": "ORACLE: socket wait returned the fresh peer reply without correlation claims",
+    "old": "ORACLE: later active turn starved the selected complete socket reply",
+    "fixed": "ORACLE: selected complete socket reply returned despite later active turn without correlation claims",
 }
 for label, oracle in oracles.items():
     folder = root / ("repro-" + label)
     log = (folder / "output.log").read_text()
     assert oracle in log and "SOCKET_FRAME_RECEIVED: True" in log and "WRAPPED_PEER_TURN_AND_REPLY: True" in log
+    assert "LATER_TURN_STARTED: True" in log
     path = folder / "receipt.json"
     receipt = json.loads(path.read_text())
     assert receipt["exit_code"] == (1 if label == "old" else 0) and not receipt["timed_out"]
@@ -19,9 +20,9 @@ for label, oracle in oracles.items():
 manifest = {
     "schema_version": 1, "candidate_id": "agent-deck-2640", "status": "fixed",
     "issue": "https://github.com/asheshgoplani/agent-deck/issues/2640",
-    "oracle": "Completed wrapped peer reply exists after actual socket delivery; old CLI times out binding exact prompt, fixed CLI returns it explicitly uncorrelated. Setup failures are not defect evidence.",
-    "affected_revision": "8d0f1fe1506dec1405d774c42c178291d1b20f40",
-    "fixed_revision": "0bf12b8be4b1fcd7d3ef14b82b2cc13845074b15",
+    "oracle": "Selected complete peer reply exists, but a later active turn starves the old pane-global completion wait; fixed CLI returns only the selected reply explicitly uncorrelated. Setup failures are not defect evidence.",
+    "affected_revision": "0bf12b8be4b1fcd7d3ef14b82b2cc13845074b15",
+    "fixed_revision": "0df60596e4120a832336b361e166d7f624443225",
     "reproduction": {"script": ".verification/repro.sh", "fixtures": "fixtures/",
                      "old_receipt": "repro-old/receipt.json", "fixed_receipt": "repro-fixed/receipt.json"},
     "regression": {"test": "TestSessionSendSocketWaitPeerReply",
