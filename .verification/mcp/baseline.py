@@ -7,7 +7,7 @@ import subprocess
 import time
 
 OLD = "8d0f1fe1506dec1405d774c42c178291d1b20f40"
-TEST_SOURCE = "34b1be1cfff214e43233d42dffcc0ba54ac35cf8"
+TEST_SOURCE = "6cf8eecc4b191c6b3a542ca9b7020d2381acd673"
 TEST = "cmd/agent-deck/mcp_proxy_lifetime_test.go"
 ROOT = pathlib.Path("/tmp/src")
 PROOF = pathlib.Path("/proof")
