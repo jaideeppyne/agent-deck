@@ -1,7 +1,7 @@
 name: Contributor MCP proxy lifetime baseline (fork only)
 on:
   push:
-    branches: ['verify/mcp-proxy-lifetime-baseline']
+    branches: ['verify/mcp-proxy-lifetime-pressure-baseline']
 permissions:
   contents: read
 jobs:
