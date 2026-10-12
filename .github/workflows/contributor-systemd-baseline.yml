@@ -1,0 +1,42 @@
+name: Contributor systemd log-directory baseline (fork only)
+on:
+  push:
+    branches: ['verify/systemd-log-dir-baseline']
+permissions:
+  contents: read
+jobs:
+  baseline:
+    if: github.repository == 'jaideeppyne/agent-deck'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Build and source regression in isolated Docker
+        run: |
+          mkdir -p proof
+          docker build -t systemd-log-proof .verification/systemd
+          docker run --rm --init --mount type=bind,src="$PWD",dst=/src,readonly \
+            --mount type=bind,src="$PWD/proof",dst=/proof \
+            -e HOME=/tmp/build-home -e AGENTDECK_TEST_CONTAINER=1 \
+            -e AGENTDECK_SKIP_UPDATE_CHECK=1 systemd-log-proof bash -c \
+            'set -eu; mkdir -p "$HOME"; cp -R /src /tmp/src; cd /tmp/src; python3 .verification/systemd/build.py'
+      - name: Actual CLI and generated systemd unit with disposable user manager
+        run: |
+          set +e
+          timeout 120 python3 .verification/systemd/repro.py proof/agent-deck-old proof/repro-old
+          rc=$?
+          set -e
+          test "$rc" -eq 1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: systemd-log-baseline
+          path: |
+            proof/regression-old.log
+            proof/regression-old.json
+            proof/repro-old/output.log
+            proof/repro-old/receipt.json
+          retention-days: 7
