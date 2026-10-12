@@ -1,0 +1,50 @@
+name: Contributor socket-wait review baseline (fork only)
+on:
+  push:
+    branches: ['verify/socket-wait-review-baseline']
+permissions:
+  contents: read
+jobs:
+  baseline:
+    if: github.repository == 'jaideeppyne/agent-deck'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Build frozen fixture and behavioral regression in Docker
+        run: |
+          mkdir -p proof fixtures
+          cp .verification/fixtures/repro.py fixtures/
+          docker build -t socket-review-proof -f .verification/Dockerfile .verification
+          image=$(docker image inspect socket-review-proof --format '{{.Id}}')
+          docker run --rm --init --mount type=bind,src="$PWD",dst=/src,readonly \
+            --mount type=bind,src="$PWD/proof",dst=/proof \
+            --mount type=bind,src="$PWD/fixtures",dst=/fixtures \
+            -e PROOF_IMAGE_ID="$image" -e HOME=/tmp/build-home \
+            -e AGENTDECK_TEST_CONTAINER=1 -e AGENTDECK_SKIP_UPDATE_CHECK=1 \
+            socket-review-proof bash -c 'set -eu; mkdir -p "$HOME"; cp -R /src /tmp/src; cd /tmp/src; python3 .verification/review-baseline.py'
+      - name: Actual CLI selected turn starvation reproduction
+        run: |
+          image=$(docker image inspect socket-review-proof --format '{{.Id}}')
+          set +e
+          python3 skills/deck-repro/scripts/run.py --image "$image" --binary proof/agent-deck-old \
+            --script .verification/repro.sh --fixtures fixtures --out proof/repro-old --timeout 120
+          rc=$?
+          set -e
+          cat proof/repro-old/output.log
+          test "$rc" -eq 1
+          grep -q 'ORACLE: later active turn starved the selected complete socket reply' proof/repro-old/output.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: socket-review-baseline
+          path: |
+            proof/regression-old/output.log
+            proof/regression-old/receipt.json
+            proof/repro-old/output.log
+            proof/repro-old/receipt.json
+            proof/repro-old/container.json
+          retention-days: 7

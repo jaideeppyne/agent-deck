@@ -20,7 +20,7 @@ shim.write_text('#!/bin/sh\nexec "$SOCKET_WAIT_TEST_BINARY" -test.run=^TestSocke
 shim.chmod(0o700)
 os.environ.update(PATH=str(shimdir) + os.pathsep + os.environ["PATH"],
                   SOCKET_WAIT_TEST_BINARY="/fixtures/claude-helper",
-                  SOCKET_WAIT_FIXTURE="idle", AGENT_DECK_TASK6_HELPER_PROCESS="1",
+                  SOCKET_WAIT_FIXTURE="next-turn", AGENT_DECK_TASK6_HELPER_PROCESS="1",
                   AGENTDECK_PROFILE="socket-repro", AGENTDECK_SKIP_UPDATE_CHECK="1")
 
 
@@ -66,19 +66,21 @@ try:
     rows = [json.loads(line) for path in transcripts for line in path.read_text().splitlines()]
     reply = any(row.get("uuid") == "peer-reply" for row in rows)
     wrapped = any(row.get("origin", {}).get("kind") == "peer" and row.get("isMeta") for row in rows)
+    later = any(row.get("uuid") == "later-user" for row in rows)
     print("SOCKET_FRAME_RECEIVED:", True, flush=True)
     print("WRAPPED_PEER_TURN_AND_REPLY:", wrapped and reply, flush=True)
-    if not wrapped or not reply:
+    print("LATER_TURN_STARTED:", later, flush=True)
+    if not wrapped or not reply or not later:
         raise RuntimeError("fixture did not write the expected peer reply")
     payload = json.loads(result.stdout)
-    if result.returncode == 1 and "turn identity not established" in payload.get("error", ""):
-        print("ORACLE: socket wait rejected a completed wrapped peer reply", flush=True)
+    if result.returncode == 1 and "timeout waiting for completion" in payload.get("error", ""):
+        print("ORACLE: later active turn starved the selected complete socket reply", flush=True)
         code = 1
     elif (result.returncode == 0 and payload.get("content") == "PEER REPLY"
           and payload.get("transport") == "socket" and payload.get("verified") is False
           and payload.get("wait_outcome") == "observed_not_correlated"
           and payload.get("submitted") is False and payload.get("acknowledged") is False):
-        print("ORACLE: socket wait returned the fresh peer reply without correlation claims", flush=True)
+        print("ORACLE: selected complete socket reply returned despite later active turn without correlation claims", flush=True)
         code = 0
     else:
         raise RuntimeError("unexpected outcome; neither defect nor healthy oracle")
