@@ -4,7 +4,7 @@ import json
 import pathlib
 
 BASE = "8d0f1fe1506dec1405d774c42c178291d1b20f40"
-FIXED = "086db80842d618de2531f6ba1b7f0773942c3757"
+FIXED = "dd24fcbbce280313c7db9200ee2268f478fd1b18"
 proof = pathlib.Path("proof")
 for kind in ["repro", "regression"]:
     receipts = []

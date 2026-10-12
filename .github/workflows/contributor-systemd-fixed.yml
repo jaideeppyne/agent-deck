@@ -1,7 +1,7 @@
-name: Contributor systemd log-directory verification (fork only)
+name: Contributor systemd private log-directory verification (fork only)
 on:
   push:
-    branches: ['verify/systemd-log-dir-fixed']
+    branches: ['verify/systemd-private-log-fixed']
 permissions:
   contents: read
 jobs:
@@ -33,7 +33,7 @@ jobs:
             proof/agent-deck-old proof/repro-old 8d0f1fe1506dec1405d774c42c178291d1b20f40
           old_rc=$?
           sudo -n env PROOF_VM_IMAGE="$vm" timeout 120 python3 .verification/systemd/repro.py \
-            proof/agent-deck-fixed proof/repro-fixed 086db80842d618de2531f6ba1b7f0773942c3757
+            proof/agent-deck-fixed proof/repro-fixed dd24fcbbce280313c7db9200ee2268f478fd1b18
           fixed_rc=$?
           set -e
           cat proof/repro-old/output.log proof/repro-fixed/output.log
@@ -51,7 +51,7 @@ jobs:
               mkdir -p "$HOME"
               cp -R /src /tmp/check
               cd /tmp/check
-              git worktree add /tmp/clean 086db80842d618de2531f6ba1b7f0773942c3757
+              git worktree add /tmp/clean dd24fcbbce280313c7db9200ee2268f478fd1b18
               cp /src/.verification/systemd/pr-body.md /tmp/pr-body.md
               cd /tmp/clean
               FULL_TESTS=1 BASE_REF=8d0f1fe1506dec1405d774c42c178291d1b20f40 REPRO_REPORT=/proof/result.json \
@@ -81,7 +81,7 @@ jobs:
           persist-credentials: false
       - name: Official five-stage Docker runner on clean source
         run: |
-          git worktree add /tmp/official-source 086db80842d618de2531f6ba1b7f0773942c3757
+          git worktree add /tmp/official-source dd24fcbbce280313c7db9200ee2268f478fd1b18
           set -o pipefail
           make -C /tmp/official-source verify-docker 2>&1 | tee official-docker.log
       - uses: actions/upload-artifact@v4

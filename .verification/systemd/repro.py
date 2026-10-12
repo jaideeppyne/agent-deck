@@ -102,6 +102,9 @@ try:
     unit = user(["systemctl", "--user", "cat", UNIT]).stdout
     assert "StandardOutput=append:" + str(log_dir / "transition-notifier.log") in unit
     if log_dir.is_dir() and healthy():
+        mode = user(["stat", "-c", "%a", log_dir]).stdout.strip()
+        if mode != "700":
+            raise RuntimeError("new notifier log directory must be owner-only: " + mode)
         lines.append("ORACLE: actual CLI created log directory and generated notifier remains active\n")
         verdict = 0
     else:
