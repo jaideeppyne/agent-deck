@@ -26,7 +26,7 @@ jobs:
       - name: Actual CLI and generated systemd unit with disposable user manager
         run: |
           set +e
-          timeout 120 python3 .verification/systemd/repro.py proof/agent-deck-old proof/repro-old
+          sudo -n timeout 120 python3 .verification/systemd/repro.py proof/agent-deck-old proof/repro-old
           rc=$?
           set -e
           test "$rc" -eq 1

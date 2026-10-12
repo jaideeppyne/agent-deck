@@ -3,7 +3,9 @@ import hashlib
 import json
 import os
 import pathlib
+import pwd
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -29,9 +31,19 @@ verdict = 2
 
 
 def run(args, check=True, timeout=30):
-    result = subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                            text=True, timeout=timeout)
+    process = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                               text=True, start_new_session=True)
+    try:
+        stdout, stderr = process.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        os.killpg(process.pid, signal.SIGKILL)
+        stdout, stderr = process.communicate()
+        lines.append("TIMED_OUT: " + " ".join(map(str, args)) + "\n" + stdout + stderr)
+        raise
+    result = subprocess.CompletedProcess(args, process.returncode, stdout, stderr)
     lines.append("$ " + " ".join(map(str, args)) + "\n" + result.stdout + f"exit={result.returncode}\n")
+    if result.stderr:
+        lines.append("stderr: " + result.stderr + "\n")
     if check and result.returncode:
         raise RuntimeError(f"setup/command failure: {args[0]} exit={result.returncode}")
     return result
@@ -64,7 +76,7 @@ def healthy():
 
 try:
     run(["systemctl", "--version"])
-    run(["sudo", "useradd", "--create-home", "--home-dir", str(home), "--shell", "/bin/sh", name])
+    run(["sudo", "useradd", "--no-log-init", "--create-home", "--home-dir", str(home), "--shell", "/bin/sh", name])
     created = True
     uid = int(run(["id", "-u", name]).stdout.strip())
     run(["sudo", "loginctl", "enable-linger", name])
@@ -110,6 +122,16 @@ except Exception as error:
     verdict = 2
 finally:
     try:
+        # Account creation can partially succeed before its subprocess fails.
+        try:
+            account = pwd.getpwnam(name)
+        except KeyError:
+            account = None
+        if account is not None:
+            if account.pw_dir != str(home):
+                raise RuntimeError("refusing cleanup of an unrelated account")
+            created = True
+            uid = account.pw_uid
         if uid is not None:
             user(["systemctl", "--user", "disable", "--now", UNIT], check=False)
             run(["sudo", "systemctl", "stop", f"user@{uid}.service"])
