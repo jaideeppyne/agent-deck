@@ -79,7 +79,7 @@ def healthy():
 try:
     run(["systemctl", "--version"])
     run(["sudo", "useradd", "--no-log-init", "--no-create-home", "--no-user-group", "--gid", "users",
-         "--key", "CREATE_MAIL_SPOOL=no", "--key", "SUB_UID_COUNT=0", "--key", "SUB_GID_COUNT=0",
+         "--key", "SUB_UID_COUNT=0", "--key", "SUB_GID_COUNT=0",
          "--home-dir", str(home), "--shell", "/bin/sh", name])
     created = True
     uid = int(run(["id", "-u", name]).stdout.strip())
@@ -163,7 +163,7 @@ finally:
         "binary_sha256": hashlib.sha256(source_binary.read_bytes()).hexdigest(),
         "script_sha256": hashlib.sha256(pathlib.Path(__file__).read_bytes()).hexdigest(),
         "experiment": {"image_id": vm_image, "platform": "disposable GitHub Ubuntu VM user manager", "timeout_seconds": 120},
-        "fixtures": {"setup": hashlib.sha256(b"fresh OS user without skeleton/mail/subids, private empty HOME, no log directory, no remote channels, heartbeat disabled").hexdigest()},
+        "fixtures": {"setup": hashlib.sha256(b"fresh OS user with zero subid ranges, private empty HOME, no log directory, no remote channels, heartbeat disabled").hexdigest()},
         "oracle_matched": verdict in (0, 1),
         "oracle_evidence": next((line.strip() for line in lines if line.startswith("ORACLE:")), ""),
     }
