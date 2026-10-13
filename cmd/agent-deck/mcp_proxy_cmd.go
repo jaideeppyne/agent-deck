@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"net"
@@ -64,6 +65,7 @@ func runMCPProxy(socketPath string) {
 	retryDelay := initialRetryDelay
 	retries := 0
 	dialer := net.Dialer{Timeout: dialTimeout}
+	var stream mcpProxyInput
 
 	for ctx.Err() == nil {
 		// #nosec G704 -- "unix" socket dial, not a network address; socketPath
@@ -93,7 +95,7 @@ func runMCPProxy(socketPath string) {
 		retryDelay = initialRetryDelay
 		retries = 0
 
-		mcpProxyConnection(ctx, conn, input)
+		mcpProxyConnection(ctx, conn, input, &stream)
 
 		// Brief pause before reconnecting
 		if !mcpProxyPause(ctx, reconnectPause) {
@@ -113,7 +115,12 @@ func mcpProxyPause(ctx context.Context, delay time.Duration) bool {
 	}
 }
 
-func mcpProxyConnection(ctx context.Context, conn net.Conn, input <-chan []byte) {
+type mcpProxyInput struct {
+	pending        []byte
+	discardPartial bool
+}
+
+func mcpProxyConnection(ctx context.Context, conn net.Conn, input <-chan []byte, stream *mcpProxyInput) {
 	stop := context.AfterFunc(ctx, func() { _ = conn.Close() })
 	done := make(chan struct{})
 	go func() {
@@ -131,21 +138,50 @@ func mcpProxyConnection(ctx context.Context, conn net.Conn, input <-chan []byte)
 		case <-ctx.Done():
 		}
 	}()
+	partial := false
 	for {
+		if len(stream.pending) > 0 {
+			if stream.discardPartial {
+				// Reads do not coincide with NDJSON requests. A prefix sent on
+				// the old socket makes this request's continuation unsafe to replay.
+				newline := bytes.IndexByte(stream.pending, '\n')
+				if newline < 0 {
+					stream.pending = nil
+					continue
+				}
+				stream.pending = stream.pending[newline+1:]
+				stream.discardPartial = false
+				if len(stream.pending) == 0 {
+					continue
+				}
+			}
+			chunk := stream.pending
+			written := 0
+			for written < len(chunk) {
+				n, err := conn.Write(chunk[written:])
+				written += n
+				if err != nil || n == 0 {
+					if written > 0 {
+						// Conservatively drop this chunk after any write progress.
+						stream.discardPartial = chunk[len(chunk)-1] != '\n'
+						stream.pending = nil
+					} else if partial {
+						stream.discardPartial = true
+					}
+					return
+				}
+			}
+			partial = chunk[len(chunk)-1] != '\n'
+			stream.pending = nil
+		}
 		select {
 		case <-ctx.Done():
 			return
 		case <-done:
+			stream.discardPartial = stream.discardPartial || partial
 			return
 		case chunk := <-input:
-			for len(chunk) > 0 {
-				n, err := conn.Write(chunk)
-				// Never replay a partially written request on another connection.
-				if err != nil || n == 0 {
-					return
-				}
-				chunk = chunk[n:]
-			}
+			stream.pending = chunk
 		}
 	}
 }
