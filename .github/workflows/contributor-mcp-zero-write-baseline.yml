@@ -15,7 +15,7 @@ jobs:
           persist-credentials: false
       - uses: actions/checkout@v4
         with:
-          ref: fbc5422ae9b5e87385a0fb8367a4bf156e300f4c
+          ref: 0712fa87a3b232ef9fb35be7f046948abf4122f8
           path: candidate
           fetch-depth: 0
           persist-credentials: false
@@ -45,6 +45,8 @@ jobs:
               cat /proof/baseline.log
               test "$rc" = 1
               test "$(grep -Fc -- "--- FAIL: TestMCPProxyZeroWriteRecovery/whole-unwritten-request" /proof/baseline.log)" = 3
+              test "$(grep -Fc -- "--- FAIL: TestMCPProxyZeroWriteRecovery/continuation-spans-new-input" /proof/baseline.log)" = 3
+              test "$(grep -Fc -- "--- FAIL: TestMCPProxyZeroWriteRecovery/backend-close-with-incomplete-request" /proof/baseline.log)" = 3
               test "$(grep -Fc -- "--- PASS: TestMCPProxyZeroWriteRecovery/continuation-after-written-prefix" /proof/baseline.log)" = 3
               test "$(grep -Fc -- "--- PASS: TestMCPProxyZeroWriteFixture" /proof/baseline.log)" = 3
               sha256sum /proof/baseline.log > /proof/SHA256SUMS
