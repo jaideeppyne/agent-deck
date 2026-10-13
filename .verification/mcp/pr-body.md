@@ -1,22 +1,30 @@
 ## What problem does this solve?
 
-Addresses the orphan MCP proxy client portion of #2649: stdin EOF reconnects instead of exiting, parent death with inherited stdin leaves clients running, and backend reconnects can leave competing stdin readers.
+Addresses the MCP proxy client lifetime and reconnect-input portion of #2649. A closed client stdin should end its proxy, and a socket disconnect must not lose an input chunk whose write made no progress or forward a continuation whose prefix went to the previous connection.
 
 ## Why this change
 
-Use one bounded stdin reader across socket generations, cancellable dial/backoff, and a client-lifetime context. Detect parent PID changes and pipe hangup even when input is backpressured; close connections on cancellation. Retain backend reconnects without replaying partially written requests or killing shared pool servers. No new dependency: `x/sys/unix` already exists. The fallback relies on reader EOF and parent changes outside Linux/macOS.
+One bounded 32 KiB stdin reader persists across socket generations. Cancellable dial/backoff and connection closure end the proxy on stdin EOF or a parent identity change. The reconnect state retains a zero-progress chunk at a request boundary, and skips an unfinished request through its next newline rather than replaying a suffix on a new connection. A chunk with positive write progress is conservatively dropped, not replayed.
 
-The 506 changed lines primarily contain an actual subprocess/socket fixture and lifetime/reconnect/backpressure regression matrix. Splitting those tests from their small lifecycle implementation would leave this behavior unguarded; there is no unrelated pool refactor. The existing reaper is only tested, not changed.
+The added fixture and state are part of this same lifecycle problem; splitting the regression matrix from the implementation would leave the fix unguarded. Diff-size warnings are expected and will be disclosed. The existing local Unix dial now uses DialContext; this is not a new external endpoint. No new dependencies or shared pool production changes.
 
 ## User impact
 
-Client stdin closing or its parent exiting ends that proxy. Backend disconnects with a live client still reconnect. EOF means terminal client shutdown, not guaranteed draining of queued requests/responses. This does not claim a measured memory reduction or a fix to every historical zombie report.
+Backend reconnects retain wholly unsent input at newline request boundaries without delivering incomplete continuations as new requests. Input remains bounded. EOF ends the client, not a promise to drain queued requests or responses, and no measured memory reduction or blanket historical-zombie fix is claimed.
+
+**Startup limitation:** parent identity is sampled inside the proxy. A parent exit after that snapshot is detected; a launching parent that exited before the snapshot and left the child with a stable reaper is not detected. Rejecting every PID-1 parent would also reject legitimate container launches. That review finding remains open pending a stronger launcher-identity contract; the existing parent-exit test does not cover pre-startup adoption.
 
 ## Evidence
 
-Tests-first baseline run38271154874 on unchanged main8d0f1fe: healthy traffic passes; three EOF states, three backpressure cases and parent death leave clients alive; reconnect loses request1. Current pool reaper passes natural-exit and five-restart controls, repeated three times. Actual isolated CLI reconnects nine times in one second after EOF. An earlier parent fixture used too-short helper-exit allowance under race runtime; it was corrected before this valid baseline, without weakening the proxy deadline.
+Exact candidate: a03e89a291d8337adc4f9d7e34b30144e67e3ca9. This body is for fork validation, not a claim that the new full gates have already passed or that the public PR has been updated.
 
-Paired fixed four receipts, race repeats, cross-builds, full contributor self-check and official five-stage Docker CI are still pending. Do not publish until independently inspected. The same actual-CLI fixture on both revisions also records startup-to-first-reply and 25 ping roundtrip timings after five warmups; this is a small smoke measurement, not a throughput or macOS performance claim. The built-in revert check may warn because reverting the new helper files makes the program fail to compile; frozen tests overlay unchanged compilable main for behavioral red evidence instead. Linux runtime evidence only; Darwin arm64 cross-build does not establish macOS runtime behavior. All Go execution is in remote disposable Docker.
+- Tests-first baseline38330171815 freezes0712fa8 over unchanged published e4. Nine behavioral failures across three repeated request-loss/continuation cases, six passing controls. A separate Unix half-close control proves a zero-byte write with the opposite output half still open. Artifact log hash independently verified.
+- Candidate38330768422: all lifetime tests under race detection count3 pass; four new framing cases each pass three times. Exact source and artifact hashes independently checked. Darwin/Linux arm64 cross-builds pass, not macOS runtime evidence.
+- That initial targeted job ran **no pool tests** because its command lacked integration tags. Corrected38331504618 explicitly requires both tagged natural-exit and restart controls; do not count the initial empty run as evidence.
+- The full paired receipt experiment, native contributor self-check, and official five-stage Docker runner are being rerun on this exact source. Earlier e4 self-check failures and the official runner's built-in exit-status retry remain disclosed in the public PR; no clean-first-pass claim follows from them.
+- Small timing samples in the public PR refer to e4, not this follow-up. The new paired actual-CLI fixture will record comparable startup and ping timings; no throughput or speedup claim.
+
+All Go execution is in remote disposable Docker, not on the host. Tests use real CLI subprocesses, pipes and Unix sockets; no new helper weakens the EOF deadline.
 
 ## AI disclosure
 
@@ -28,16 +36,16 @@ Paired fixed four receipts, race repeats, cross-builds, full contributor self-ch
 
 ## What actually bothered you
 
-The human asked: "next make 5-6 more strong contributions on projects which has very high frequency of merges in the world". This contribution addresses an existing report, not a claim that the author personally encountered or independently reviewed the bug.
+The human asked: "next make 5-6 more strong contributions on projects which has very high frequency of merges in the world". This addresses an existing report and subsequent review feedback; it is not a claim that the human personally encountered or independently reviewed the bug.
 
 ## Checklist
 
 - [x] Targeted diff: one problem, no unrelated changes
 - [x] Tests added or updated for new behavior
-- [ ] Test suite passes sandboxed, inside a container
-- [ ] If this touches a hot path: before/after timing evidence included
+- [ ] Test suite passes sandboxed, inside a container: awaiting the new full checks
+- [ ] If this touches a hot path: new paired before/after timing evidence included
 - [x] CHANGELOG.md untouched
 - [x] AI-assisted? Disclosed above, with validation evidence
-- [ ] "Allow edits from maintainers" is enabled
+- [x] "Allow edits from maintainers" is enabled on the existing public PR
 
 <!-- gate:ai=authored model=unsure intent=yes -->
