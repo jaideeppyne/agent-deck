@@ -35,12 +35,10 @@ func TestMCPProxyZeroWriteFixture(t *testing.T) {
 }
 
 func TestMCPProxyZeroWriteRecovery(t *testing.T) {
-	for _, partial := range []bool{false, true} {
-		name := "whole-unwritten-request"
-		if partial {
-			name = "continuation-after-written-prefix"
-		}
+	for _, name := range []string{"whole-unwritten-request", "continuation-after-written-prefix",
+		"continuation-spans-new-input", "backend-close-with-incomplete-request"} {
 		t.Run(name, func(t *testing.T) {
+			partial := name != "whole-unwritten-request"
 			listener, path := mcpProxySocket(t)
 			f := newMCPProxyFixture(t, path)
 			first := acceptMCPProxy(t, listener)
@@ -62,15 +60,26 @@ func TestMCPProxyZeroWriteRecovery(t *testing.T) {
 
 			// Keep the backend's write half open: the proxy output reader cannot
 			// observe EOF before the next stdin chunk reaches its socket Write.
-			if err := first.CloseRead(); err != nil {
-				t.Fatal(err)
+			var closeErr error
+			if name == "backend-close-with-incomplete-request" {
+				closeErr = first.Close()
+			} else {
+				closeErr = first.CloseRead()
+			}
+			if closeErr != nil {
+				t.Fatal(closeErr)
 			}
 			pending := `{"jsonrpc":"2.0","method":"pending","id":1}` + "\n"
 			if partial {
 				pending = `ial","id":1}` + "\n"
 			}
-			if _, err := io.WriteString(f.input, pending); err != nil {
-				t.Fatal(err)
+			if name == "continuation-spans-new-input" {
+				pending = "i"
+			}
+			if name != "backend-close-with-incomplete-request" {
+				if _, err := io.WriteString(f.input, pending); err != nil {
+					t.Fatal(err)
+				}
 			}
 
 			second := acceptMCPProxy(t, listener)
@@ -79,7 +88,13 @@ func TestMCPProxyZeroWriteRecovery(t *testing.T) {
 				// A zero-byte write of this chunk does not make it a whole
 				// request: its prefix went to the previous socket generation.
 				want = `{"jsonrpc":"2.0","method":"next","id":2}` + "\n"
-				if _, err := io.WriteString(f.input, want); err != nil {
+				remaining := want
+				if name == "continuation-spans-new-input" {
+					remaining = `al","id":1}` + "\n" + want
+				} else if name == "backend-close-with-incomplete-request" {
+					remaining = pending + want
+				}
+				if _, err := io.WriteString(f.input, remaining); err != nil {
 					t.Fatal(err)
 				}
 			}
