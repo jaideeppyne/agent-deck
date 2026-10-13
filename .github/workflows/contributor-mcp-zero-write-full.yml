@@ -1,0 +1,95 @@
+name: Contributor MCP zero-write full verification (fork only)
+on:
+  push:
+    branches: ['verify/mcp-zero-write-full']
+permissions:
+  contents: read
+jobs:
+  reproduce:
+    if: github.repository == 'jaideeppyne/agent-deck'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Paired builds and frozen source regression in Docker
+        run: |
+          mkdir -p proof fixtures
+          cp .verification/mcp/fixtures/repro.py fixtures/
+          docker build -t mcp-lifetime-proof -f .verification/mcp/Dockerfile .verification/mcp
+          image=$(docker image inspect mcp-lifetime-proof --format '{{.Id}}')
+          docker run --rm --init --mount type=bind,src="$PWD",dst=/src,readonly \
+            --mount type=bind,src="$PWD/proof",dst=/proof \
+            -e PROOF_IMAGE_ID="$image" -e HOME=/tmp/build-home \
+            -e AGENTDECK_TEST_CONTAINER=1 -e AGENTDECK_SKIP_UPDATE_CHECK=1 \
+            mcp-lifetime-proof bash -c 'set -eu; mkdir -p "$HOME"; cp -R /src /tmp/src; cd /tmp/src; python3 .verification/mcp/build.py'
+      - name: Paired actual CLI EOF reproduction with network disabled
+        run: |
+          image=$(docker image inspect mcp-lifetime-proof --format '{{.Id}}')
+          set +e
+          python3 skills/deck-repro/scripts/run.py --image "$image" --binary proof/agent-deck-old \
+            --script .verification/mcp/repro.sh --fixtures fixtures --out proof/repro-old --timeout 120
+          old_rc=$?
+          python3 skills/deck-repro/scripts/run.py --image "$image" --binary proof/agent-deck-fixed \
+            --script .verification/mcp/repro.sh --fixtures fixtures --out proof/repro-fixed --timeout 120
+          fixed_rc=$?
+          set -e
+          cat proof/repro-old/output.log proof/repro-fixed/output.log
+          test "$old_rc" -eq 1
+          test "$fixed_rc" -eq 0
+          python3 .verification/mcp/finalize.py
+          python3 skills/deck-repro/scripts/validate.py proof/result.json --require-status fixed
+      - name: Full contributor self-check on clean exact source
+        run: |
+          docker run --rm --init --mount type=bind,src="$PWD",dst=/src,readonly \
+            --mount type=bind,src="$PWD/proof",dst=/proof \
+            -e HOME=/tmp/check-home -e AGENTDECK_TEST_CONTAINER=1 \
+            -e AGENTDECK_SKIP_UPDATE_CHECK=1 mcp-lifetime-proof bash -c '
+              set -euo pipefail
+              mkdir -p "$HOME"
+              cp -R /src /tmp/check
+              cd /tmp/check
+              git worktree add /tmp/clean a03e89a291d8337adc4f9d7e34b30144e67e3ca9
+              cp /src/.verification/mcp/pr-body.md /tmp/pr-body.md
+              cd /tmp/clean
+              FULL_TESTS=1 BASE_REF=8d0f1fe1506dec1405d774c42c178291d1b20f40 REPRO_REPORT=/proof/result.json \
+                .github/skills/agent-deck-contributor/scripts/self-check.sh /tmp/pr-body.md 2>&1 | tee /proof/self-check.log
+            '
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mcp-lifetime-proof
+          path: |
+            proof/regression-*/output.log
+            proof/regression-*/receipt.json
+            proof/repro-*/output.log
+            proof/repro-*/receipt.json
+            proof/repro-*/container.json
+            proof/source-guards.log
+            proof/pool-reaper-control.log
+            proof/cross-build.log
+            proof/result.json
+            proof/self-check.log
+          retention-days: 7
+  official-docker-ci:
+    if: github.repository == 'jaideeppyne/agent-deck'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Official five-stage Docker runner on clean source
+        run: |
+          git worktree add /tmp/official-source a03e89a291d8337adc4f9d7e34b30144e67e3ca9
+          set -o pipefail
+          make -C /tmp/official-source verify-docker 2>&1 | tee official-docker.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mcp-lifetime-official-ci
+          path: official-docker.log
+          retention-days: 7
