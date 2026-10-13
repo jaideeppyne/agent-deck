@@ -1,0 +1,58 @@
+name: Contributor MCP zero-write fixed checks (fork only)
+on:
+  push:
+    branches: [verify/mcp-zero-write-fixed]
+permissions:
+  contents: read
+jobs:
+  verification:
+    if: github.repository == 'jaideeppyne/agent-deck'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: a03e89a291d8337adc4f9d7e34b30144e67e3ca9
+          path: candidate
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Original disposable Go test image
+        run: docker build -t mcp-zero-fixed -f .verification/mcp/Dockerfile .verification/mcp
+      - name: All lifetime regressions and pool controls under race detection
+        shell: bash
+        run: |
+          mkdir -p proof
+          docker run --rm --init --mount type=bind,src="$PWD/candidate",dst=/src,readonly \
+            --mount type=bind,src="$PWD/proof",dst=/proof \
+            -e HOME=/tmp/test-home -e AGENTDECK_TEST_CONTAINER=1 \
+            -e AGENTDECK_SKIP_UPDATE_CHECK=1 mcp-zero-fixed bash -c '
+              set -euo pipefail
+              mkdir -p "$HOME"
+              cp -R /src /tmp/source
+              cd /tmp/source
+              git rev-parse HEAD | tee /proof/source.txt
+              test "$(git rev-parse HEAD)" = a03e89a291d8337adc4f9d7e34b30144e67e3ca9
+              test -z "$(gofmt -l cmd/agent-deck/mcp_proxy_cmd.go cmd/agent-deck/mcp_proxy_zero_write_test.go)"
+              timeout 600 go test -race -v -count=3 -run "^TestMCPProxy" ./cmd/agent-deck \
+                2>&1 | tee /proof/lifetime.log
+              for name in whole-unwritten-request continuation-after-written-prefix continuation-spans-new-input backend-close-with-incomplete-request; do
+                test "$(grep -Fc -- "--- PASS: TestMCPProxyZeroWriteRecovery/$name" /proof/lifetime.log)" = 3
+              done
+              test "$(grep -Fc -- "--- PASS: TestMCPProxyZeroWriteFixture" /proof/lifetime.log)" = 3
+              timeout 120 go test -race -v -count=3 \
+                -run "^(TestPool_RestartLoop_ProducesOneChild|TestSocketProxy_NoZombie_OnProcessExit)$" \
+                ./internal/mcppool 2>&1 | tee /proof/pool.log
+              for target in darwin linux; do
+                GOOS="$target" GOARCH=arm64 go build -o "/tmp/agent-deck-$target" ./cmd/agent-deck
+                printf "GOOS=%s GOARCH=arm64 build PASS\n" "$target" | tee -a /proof/cross-build.log
+              done
+              sha256sum /proof/*.log > /proof/SHA256SUMS
+            '
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mcp-zero-write-fixed
+          path: proof
