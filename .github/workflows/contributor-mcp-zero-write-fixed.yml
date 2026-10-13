@@ -42,9 +42,12 @@ jobs:
                 test "$(grep -Fc -- "--- PASS: TestMCPProxyZeroWriteRecovery/$name" /proof/lifetime.log)" = 3
               done
               test "$(grep -Fc -- "--- PASS: TestMCPProxyZeroWriteFixture" /proof/lifetime.log)" = 3
-              timeout 120 go test -race -v -count=3 \
+              timeout 120 go test -tags=integration -race -v -count=3 \
                 -run "^(TestPool_RestartLoop_ProducesOneChild|TestSocketProxy_NoZombie_OnProcessExit)$" \
                 ./internal/mcppool 2>&1 | tee /proof/pool.log
+              for name in TestPool_RestartLoop_ProducesOneChild TestSocketProxy_NoZombie_OnProcessExit; do
+                test "$(grep -Fc -- "--- PASS: $name" /proof/pool.log)" = 3
+              done
               for target in darwin linux; do
                 GOOS="$target" GOARCH=arm64 go build -o "/tmp/agent-deck-$target" ./cmd/agent-deck
                 printf "GOOS=%s GOARCH=arm64 build PASS\n" "$target" | tee -a /proof/cross-build.log
