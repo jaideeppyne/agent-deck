@@ -7,11 +7,12 @@ import subprocess
 import time
 
 BASE = "8d0f1fe1506dec1405d774c42c178291d1b20f40"
-FIXED = "e4d53b07234d7826c4d670747624d7988544f2c6"
-TESTS = "a99fcdab974525e530265060bd4379b152285536"
+FIXED = "a03e89a291d8337adc4f9d7e34b30144e67e3ca9"
+TESTS = "0712fa87a3b232ef9fb35be7f046948abf4122f8"
 ROOT = pathlib.Path("/tmp/src")
 PROOF = pathlib.Path("/proof")
-paths = ["cmd/agent-deck/mcp_proxy_lifetime_test.go", "internal/mcppool/respawn_dedup_test.go"]
+paths = ["cmd/agent-deck/mcp_proxy_lifetime_test.go", "internal/mcppool/respawn_dedup_test.go",
+         "cmd/agent-deck/mcp_proxy_zero_write_test.go"]
 fixtures = {p: subprocess.check_output(["git", "show", TESTS + ":" + p], cwd=ROOT) for p in paths}
 hashes = {p: hashlib.sha256(data).hexdigest() for p, data in fixtures.items()}
 script_hash = hashlib.sha256(pathlib.Path(__file__).read_bytes()).hexdigest()
