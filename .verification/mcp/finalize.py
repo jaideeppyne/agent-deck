@@ -4,7 +4,7 @@ import json
 import pathlib
 
 BASE = "8d0f1fe1506dec1405d774c42c178291d1b20f40"
-FIXED = "e4d53b07234d7826c4d670747624d7988544f2c6"
+FIXED = "a03e89a291d8337adc4f9d7e34b30144e67e3ca9"
 proof = pathlib.Path("proof")
 for kind in ["repro", "regression"]:
     receipts = []
@@ -39,6 +39,7 @@ report = {
     "reproduction": {"script": ".verification/mcp/repro.sh", "fixtures": ".verification/mcp/fixtures", "old_receipt": "repro-old/receipt.json", "fixed_receipt": "repro-fixed/receipt.json"},
     "regression": {"test": "TestMCPProxy", "old_receipt": "regression-old/receipt.json", "fixed_receipt": "regression-fixed/receipt.json"},
     "limits": ["Linux runtime proof; macOS cross-build is not macOS runtime validation.",
+               "Parent identity changes after startup are observed; pre-startup adoption is not covered.",
                "Pool natural-exit/restart controls pass; no pool zombie fix or memory reduction claimed.",
                "EOF terminates the client, not a guarantee of draining queued requests or responses.",
                "Independent full-gate and receipt inspection is required before publication."],
